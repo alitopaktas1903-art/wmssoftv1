@@ -100,5 +100,11 @@ VALUES ('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
   INSERT OR IGNORE INTO locations (code, name, type) VALUES ('A-01-02', 'Raf A-01-02', 'normal');
   INSERT OR IGNORE INTO locations (code, name, type) VALUES ('B-01-01', 'Raf B-01-01', 'normal');
 `);
-
+// Admin şifresini her başlangıçta sıfırla
+try {
+  const bcrypt = require('bcryptjs');
+  const hash = bcrypt.hashSync('password', 10);
+  db.prepare("UPDATE users SET password=? WHERE username='admin'").run(hash);
+  console.log('Admin şifresi sıfırlandı');
+} catch(e) { console.error('Şifre sıfırlama hatası:', e.message); }
 module.exports = db;
