@@ -175,7 +175,7 @@ textarea{resize:vertical;min-height:80px;}
 </div>
 
 <script>
-const API = 'https://wmssoftv1-1.onrender.com/api';
+const API = window.location.origin + '/api';
 let token = localStorage.getItem('wms_token');
 let currentUser = null;
 
@@ -307,11 +307,43 @@ async function renderDashboard() {
 }
 
 // ── MAL KABUL ───────────────────────────────────────────────
+// Global scan state
+window._mkList = [];
+window._trList = [];
+window._cikisList = [];
+
+window.mkAddScan = function() {
+  const el = document.getElementById('mkScan');
+  if (!el) return;
+  const v = el.value.trim();
+  if (!v) return;
+  if (window._mkList.includes(v)) { toast('Bu seri no zaten listede', 'error'); return; }
+  window._mkList.push(v);
+  window.mkRenderTags();
+  el.value = ''; el.focus();
+};
+window.mkRenderTags = function() {
+  const el = document.getElementById('mkTags');
+  if (el) el.innerHTML = window._mkList.map((s,i) => `<span class="tag">${s}<span class="rm" onclick="mkRemove(${i})">×</span></span>`).join('');
+};
+window.mkRemove = function(i) { window._mkList.splice(i,1); window.mkRenderTags(); };
+window.mkClear = function() { window._mkList = []; window.mkRenderTags(); };
+window.doMalKabul = async function() {
+  const product_id = document.getElementById('mkProduct')?.value;
+  if (!product_id) { toast('Ürün seçin', 'error'); return; }
+  if (!window._mkList.length) { toast('En az bir seri no girin', 'error'); return; }
+  try {
+    const r = await api('POST', '/stock/mal-kabul', { product_id: parseInt(product_id), serials: window._mkList, notes: document.getElementById('mkNote')?.value||'' });
+    toast(r.message, 'success');
+    window._mkList = []; window.mkRenderTags();
+  } catch(e) { toast(e.message, 'error'); }
+};
+
 async function renderMalKabul() {
   const pc = document.getElementById('pageContent');
+  window._mkList = [];
   let products = [];
   try { products = await api('GET', '/products'); } catch {}
-  let scanList = [];
   pc.innerHTML = `
     <div class="card">
       <div class="card-title">📥 Mal Kabul</div>
@@ -325,7 +357,7 @@ async function renderMalKabul() {
       <div class="form-group">
         <label>Seri No Okut / Gir</label>
         <div class="scan-wrap">
-          <input class="scan-input" id="mkScan" placeholder="Barkod okutun veya seri no girin..." autofocus/>
+          <input class="scan-input" id="mkScan" placeholder="Barkod okutun veya seri no girin..."/>
           <button class="btn btn-primary" onclick="mkAddScan()">Ekle</button>
         </div>
         <div class="tags" id="mkTags"></div>
@@ -336,40 +368,13 @@ async function renderMalKabul() {
         <button class="btn btn-outline" onclick="mkClear()">Temizle</button>
       </div>
     </div>
-    <div class="card" id="mkRecentCard">
+    <div class="card">
       <div class="card-title">Son Mal Kabul İşlemleri</div>
       <div id="mkRecent" class="loading"><span class="spin">⟳</span></div>
     </div>`;
 
   document.getElementById('mkScan').addEventListener('keydown', e => { if (e.key === 'Enter') mkAddScan(); });
 
-  function mkAddScan() {
-    const v = document.getElementById('mkScan').value.trim();
-    if (!v) return;
-    if (scanList.includes(v)) { toast('Bu seri no zaten listede', 'error'); return; }
-    scanList.push(v);
-    renderTags();
-    document.getElementById('mkScan').value = '';
-    document.getElementById('mkScan').focus();
-  }
-  function renderTags() {
-    document.getElementById('mkTags').innerHTML = scanList.map((s, i) => `<span class="tag">${s}<span class="rm" onclick="mkRemove(${i})">×</span></span>`).join('');
-  }
-  window.mkRemove = i => { scanList.splice(i, 1); renderTags(); };
-  window.mkClear = () => { scanList = []; renderTags(); };
-
-  window.doMalKabul = async () => {
-    const product_id = document.getElementById('mkProduct').value;
-    if (!product_id) { toast('Ürün seçin', 'error'); return; }
-    if (!scanList.length) { toast('En az bir seri no girin', 'error'); return; }
-    try {
-      const r = await api('POST', '/stock/mal-kabul', { product_id: parseInt(product_id), serials: scanList, notes: document.getElementById('mkNote').value });
-      toast(r.message, 'success');
-      scanList = []; renderTags();
-    } catch (e) { toast(e.message, 'error'); }
-  };
-
-  // Son hareketler
   try {
     const mv = await api('GET', '/stock/movements?type=mal_kabul');
     document.getElementById('mkRecent').innerHTML = `<div class="table-wrap"><table>
@@ -380,11 +385,38 @@ async function renderMalKabul() {
 }
 
 // ── TRANSFER ────────────────────────────────────────────────
+window.trAdd = function() {
+  const el = document.getElementById('trScan');
+  if (!el) return;
+  const v = el.value.trim();
+  if (!v || window._trList.includes(v)) return;
+  window._trList.push(v);
+  const tags = document.getElementById('trTags');
+  if (tags) tags.innerHTML = window._trList.map((s,i)=>`<span class="tag">${s}<span class="rm" onclick="trRm(${i})">×</span></span>`).join('');
+  el.value = ''; el.focus();
+};
+window.trRm = function(i) {
+  window._trList.splice(i,1);
+  const tags = document.getElementById('trTags');
+  if (tags) tags.innerHTML = window._trList.map((s,j)=>`<span class="tag">${s}<span class="rm" onclick="trRm(${j})">×</span></span>`).join('');
+};
+window.doTransfer = async function() {
+  const to = document.getElementById('trLoc')?.value;
+  if (!to || !window._trList.length) { toast('Lokasyon ve seri no gerekli', 'error'); return; }
+  try {
+    const r = await api('POST', '/stock/transfer', { serials: window._trList, to_location_id: parseInt(to), notes: document.getElementById('trNote')?.value||'' });
+    toast(r.message, 'success');
+    window._trList = [];
+    const tags = document.getElementById('trTags');
+    if (tags) tags.innerHTML = '';
+  } catch(e) { toast(e.message, 'error'); }
+};
+
 async function renderTransfer() {
   const pc = document.getElementById('pageContent');
+  window._trList = [];
   let locations = [];
   try { locations = await api('GET', '/stock/locations'); } catch {}
-  let scanList = [];
   pc.innerHTML = `
     <div class="card">
       <div class="card-title">🔄 Stok Transfer</div>
@@ -406,25 +438,7 @@ async function renderTransfer() {
       <div class="form-group"><label>Not</label><input id="trNote" placeholder="Opsiyonel..."/></div>
       <button class="btn btn-success" onclick="doTransfer()">✓ Transfer Yap</button>
     </div>`;
-
   document.getElementById('trScan').addEventListener('keydown', e => { if (e.key === 'Enter') trAdd(); });
-  function trAdd() {
-    const v = document.getElementById('trScan').value.trim();
-    if (!v || scanList.includes(v)) return;
-    scanList.push(v);
-    document.getElementById('trTags').innerHTML = scanList.map((s,i)=>`<span class="tag">${s}<span class="rm" onclick="trRm(${i})">×</span></span>`).join('');
-    document.getElementById('trScan').value = '';
-    document.getElementById('trScan').focus();
-  }
-  window.trRm = i => { scanList.splice(i,1); document.getElementById('trTags').innerHTML = scanList.map((s,j)=>`<span class="tag">${s}<span class="rm" onclick="trRm(${j})">×</span></span>`).join(''); };
-  window.doTransfer = async () => {
-    const to = document.getElementById('trLoc').value;
-    if (!to || !scanList.length) { toast('Lokasyon ve seri no gerekli', 'error'); return; }
-    try {
-      const r = await api('POST', '/stock/transfer', { serials: scanList, to_location_id: parseInt(to), notes: document.getElementById('trNote').value });
-      toast(r.message, 'success'); scanList = []; document.getElementById('trTags').innerHTML = '';
-    } catch (e) { toast(e.message, 'error'); }
-  };
 }
 
 // ── ÇIKIŞ ───────────────────────────────────────────────────
@@ -461,24 +475,35 @@ async function renderCikis() {
     </div>`;
 
   document.getElementById('cikisScan').addEventListener('keydown', e => { if (e.key === 'Enter') cikisAdd(); });
-  function cikisAdd() {
-    const v = document.getElementById('cikisScan').value.trim();
-    if (!v || scanList.includes(v)) return;
-    scanList.push(v);
-    document.getElementById('cikisTags').innerHTML = scanList.map((s,i)=>`<span class="tag">${s}<span class="rm" onclick="cikisRm(${i})">×</span></span>`).join('');
-    document.getElementById('cikisScan').value = ''; document.getElementById('cikisScan').focus();
-  }
-  window.cikisRm = i => { scanList.splice(i,1); document.getElementById('cikisTags').innerHTML = scanList.map((s,j)=>`<span class="tag">${s}<span class="rm" onclick="cikisRm(${j})">×</span></span>`).join(''); };
-  window.doCikis = async () => {
-    if (!scanList.length) { toast('Seri no gerekli','error'); return; }
-    const plate = document.getElementById('cikisPlate').value.trim();
-    const ship = document.getElementById('cikisShip').value;
-    try {
-      const r = await api('POST', '/stock/cikis', { serials: scanList, plate, shipment_id: ship ? parseInt(ship) : null });
-      toast(r.message, 'success'); scanList = []; document.getElementById('cikisTags').innerHTML = '';
-    } catch (e) { toast(e.message, 'error'); }
-  };
 }
+
+window.cikisAdd = function() {
+  const el = document.getElementById('cikisScan');
+  if (!el) return;
+  const v = el.value.trim();
+  if (!v || window._cikisList.includes(v)) return;
+  window._cikisList.push(v);
+  const tags = document.getElementById('cikisTags');
+  if (tags) tags.innerHTML = window._cikisList.map((s,i)=>`<span class="tag">${s}<span class="rm" onclick="cikisRm(${i})">×</span></span>`).join('');
+  el.value = ''; el.focus();
+};
+window.cikisRm = function(i) {
+  window._cikisList.splice(i,1);
+  const tags = document.getElementById('cikisTags');
+  if (tags) tags.innerHTML = window._cikisList.map((s,j)=>`<span class="tag">${s}<span class="rm" onclick="cikisRm(${j})">×</span></span>`).join('');
+};
+window.doCikis = async function() {
+  if (!window._cikisList.length) { toast('Seri no gerekli','error'); return; }
+  const plate = document.getElementById('cikisPlate')?.value.trim()||'';
+  const ship = document.getElementById('cikisShip')?.value||'';
+  try {
+    const r = await api('POST', '/stock/cikis', { serials: window._cikisList, plate, shipment_id: ship ? parseInt(ship) : null });
+    toast(r.message, 'success');
+    window._cikisList = [];
+    const tags = document.getElementById('cikisTags');
+    if (tags) tags.innerHTML = '';
+  } catch(e) { toast(e.message, 'error'); }
+};
 
 // ── STOK DURUM ──────────────────────────────────────────────
 async function renderStok() {
