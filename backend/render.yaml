@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: wms-backend
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    disk:
+      name: wms-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATA_DIR
+        value: /data
+      - key: NODE_ENV
+        value: production

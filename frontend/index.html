@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>WMS — Depo Yönetim Sistemi</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--border:#e2e8f0;--accent:#3b82f6;--accent2:#1d4ed8;--green:#16a34a;--red:#dc2626;--yellow:#d97706;--purple:#7c3aed;--text:#1e293b;--muted:#64748b;--sidebar:#1e293b;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
+.layout{display:flex;min-height:100vh;}
+/* Sidebar */
+.sidebar{width:220px;background:var(--sidebar);color:#fff;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;transition:transform .2s;}
+.sidebar-logo{padding:20px 16px;font-size:18px;font-weight:700;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;gap:8px;}
+.sidebar-logo span{font-size:22px;}
+.sidebar-nav{flex:1;overflow-y:auto;padding:8px 0;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;color:rgba(255,255,255,0.75);cursor:pointer;transition:all .15s;font-size:13px;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,0.08);color:#fff;}
+.nav-item.active{background:rgba(59,130,246,0.25);color:#fff;border-left-color:var(--accent);}
+.nav-item .ni{font-size:16px;width:20px;text-align:center;}
+.sidebar-user{padding:12px 16px;border-top:1px solid rgba(255,255,255,0.1);font-size:12px;color:rgba(255,255,255,0.6);}
+.sidebar-user strong{display:block;color:#fff;font-size:13px;}
+/* Main */
+.main{margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh;}
+.topbar{background:#fff;border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+.topbar-title{font-size:16px;font-weight:600;}
+.content{padding:24px;flex:1;}
+/* Cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;}
+.card-title{font-size:15px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px;}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;}
+.stat-val{font-size:28px;font-weight:700;margin:4px 0;}
+.stat-lbl{font-size:12px;color:var(--muted);}
+.stat-blue .stat-val{color:var(--accent);}
+.stat-green .stat-val{color:var(--green);}
+.stat-yellow .stat-val{color:var(--yellow);}
+.stat-red .stat-val{color:var(--red);}
+/* Table */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{background:#f8fafc;font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:10px 12px;text-align:left;border-bottom:2px solid var(--border);}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tr:hover td{background:#f8fafc;}
+tr:last-child td{border-bottom:none;}
+/* Badges */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+.badge-mk{background:#dbeafe;color:#1e40af;}
+.badge-stok{background:#dcfce7;color:#166534;}
+.badge-transfer{background:#fef3c7;color:#92400e;}
+.badge-cikis{background:#fee2e2;color:#991b1b;}
+.badge-hazirlaniyor{background:#fef3c7;color:#92400e;}
+.badge-yuklendi{background:#dbeafe;color:#1e40af;}
+.badge-yolda{background:#e0e7ff;color:#3730a3;}
+.badge-teslim{background:#dcfce7;color:#166534;}
+.badge-acik{background:#fef3c7;color:#92400e;}
+.badge-kapali{background:#dbeafe;color:#1e40af;}
+.badge-onaylandi{background:#dcfce7;color:#166534;}
+/* Forms */
+.form-group{margin-bottom:14px;}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;}
+input,select,textarea{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:inherit;background:#fff;color:var(--text);transition:border-color .15s;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,0.1);}
+textarea{resize:vertical;min-height:80px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+/* Buttons */
+.btn{padding:9px 16px;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .15s;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:var(--accent2);}
+.btn-success{background:var(--green);color:#fff;}
+.btn-danger{background:var(--red);color:#fff;}
+.btn-warning{background:var(--yellow);color:#fff;}
+.btn-outline{background:#fff;border:1px solid var(--border);color:var(--text);}
+.btn-outline:hover{background:#f8fafc;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.btn-group{display:flex;gap:8px;flex-wrap:wrap;}
+/* Scan input */
+.scan-wrap{display:flex;gap:8px;margin-bottom:12px;}
+.scan-input{flex:1;font-size:16px;padding:12px 14px;border:2px solid var(--accent);border-radius:8px;}
+/* Tags */
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.tag{background:#e0e7ff;color:#3730a3;padding:3px 10px;border-radius:20px;font-size:12px;display:flex;align-items:center;gap:4px;}
+.tag .rm{cursor:pointer;color:#7c3aed;font-size:14px;line-height:1;}
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;align-items:center;justify-content:center;}
+.modal-bg.open{display:flex;}
+.modal{background:#fff;border-radius:12px;padding:24px;width:90%;max-width:520px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;}
+.modal-close{cursor:pointer;color:var(--muted);font-size:20px;}
+/* Toast */
+.toast-wrap{position:fixed;top:16px;right:16px;z-index:999;display:flex;flex-direction:column;gap:8px;}
+.toast{padding:12px 16px;border-radius:8px;font-size:13px;font-weight:500;color:#fff;min-width:240px;box-shadow:0 4px 12px rgba(0,0,0,0.15);animation:toastIn .2s ease;}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
+.toast-success{background:var(--green);}
+.toast-error{background:var(--red);}
+.toast-info{background:var(--accent);}
+/* Login */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--sidebar);}
+.login-card{background:#fff;border-radius:14px;padding:36px 32px;width:100%;max-width:380px;}
+.login-title{font-size:22px;font-weight:700;margin-bottom:4px;}
+.login-sub{color:var(--muted);font-size:13px;margin-bottom:24px;}
+/* Mobile */
+.hamburger{display:none;background:none;border:none;font-size:22px;cursor:pointer;padding:4px;}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:99;}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%);}
+  .sidebar.open{transform:translateX(0);}
+  .sidebar-overlay.open{display:block;}
+  .main{margin-left:0;}
+  .hamburger{display:block;}
+  .form-row,.form-row-3{grid-template-columns:1fr;}
+  .stats-grid{grid-template-columns:1fr 1fr;}
+  .content{padding:14px;}
+}
+.hidden{display:none!important;}
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--muted);}
+.spin{animation:spin .8s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.diff-pos{color:var(--green);font-weight:600;}
+.diff-neg{color:var(--red);font-weight:600;}
+.diff-zero{color:var(--muted);}
+</style>
+</head>
+<body>
+
+<div id="loginPage" class="login-wrap">
+  <div class="login-card">
+    <div class="login-title">🏭 WMS</div>
+    <div class="login-sub">Depo Yönetim Sistemi</div>
+    <div class="form-group"><label>Kullanıcı Adı</label><input id="loginUser" type="text" placeholder="admin" autocomplete="username"/></div>
+    <div class="form-group"><label>Şifre</label><input id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;" onclick="doLogin()">Giriş Yap</button>
+    <div id="loginErr" style="color:var(--red);font-size:12px;margin-top:10px;text-align:center;"></div>
+  </div>
+</div>
+
+<div id="appPage" class="layout hidden">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-logo"><span>🏭</span> WMS</div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active" onclick="showPage('dashboard')" data-page="dashboard"><span class="ni">📊</span> Dashboard</div>
+      <div class="nav-item" onclick="showPage('malKabul')" data-page="malKabul"><span class="ni">📥</span> Mal Kabul</div>
+      <div class="nav-item" onclick="showPage('transfer')" data-page="transfer"><span class="ni">🔄</span> Stok Transfer</div>
+      <div class="nav-item" onclick="showPage('cikis')" data-page="cikis"><span class="ni">📤</span> Stok Çıkış</div>
+      <div class="nav-item" onclick="showPage('stok')" data-page="stok"><span class="ni">📦</span> Stok Durumu</div>
+      <div class="nav-item" onclick="showPage('sevkiyat')" data-page="sevkiyat"><span class="ni">🚛</span> Sevkiyat</div>
+      <div class="nav-item" onclick="showPage('sayim')" data-page="sayim"><span class="ni">🔢</span> Stok Sayım</div>
+      <div class="nav-item" onclick="showPage('urunler')" data-page="urunler"><span class="ni">🏷️</span> Ürünler</div>
+      <div class="nav-item" onclick="showPage('hareketler')" data-page="hareketler"><span class="ni">📋</span> Hareketler</div>
+      <div id="adminNav" class="nav-item hidden" onclick="showPage('admin')" data-page="admin"><span class="ni">⚙️</span> Yönetim</div>
+    </nav>
+    <div class="sidebar-user" id="sidebarUser"></div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-title" id="topbarTitle">Dashboard</div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="doLogout()">Çıkış</button>
+    </div>
+    <div class="content" id="pageContent"></div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- Modals -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script>
+const API = window.location.origin + '/api';
+let token = localStorage.getItem('wms_token');
+let currentUser = null;
+
+// ── HELPERS ────────────────────────────────────────────────
+async function api(method, path, body, isForm) {
+  const opts = { method, headers: { Authorization: 'Bearer ' + token } };
+  if (body && !isForm) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  else if (body && isForm) opts.body = body;
+  const r = await fetch(API + path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || 'Hata oluştu');
+  return data;
+}
+
+function toast(msg, type='info') {
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  t.textContent = msg;
+  document.getElementById('toastWrap').appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function showModal(html) {
+  document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('modalBg').classList.add('open');
+}
+function closeModal() { document.getElementById('modalBg').classList.remove('open'); }
+document.getElementById('modalBg').addEventListener('click', e => { if (e.target === document.getElementById('modalBg')) closeModal(); });
+
+function badge(status) {
+  const map = { mk:'MK', stok:'Stok', transfer:'Transfer', cikis:'Çıkış', hazirlaniyor:'Hazırlanıyor', yuklendi:'Yüklendi', yolda:'Yolda', teslim:'Teslim', iptal:'İptal', acik:'Açık', kapali:'Kapalı', onaylandi:'Onaylı' };
+  return `<span class="badge badge-${status}">${map[status]||status}</span>`;
+}
+
+function fmt(dt) { if (!dt) return '-'; return new Date(dt).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+
+// ── AUTH ────────────────────────────────────────────────────
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  document.getElementById('loginErr').textContent = '';
+  try {
+    const data = await api('POST', '/auth/login', { username, password });
+    token = data.token;
+    currentUser = data.user;
+    localStorage.setItem('wms_token', token);
+    initApp();
+  } catch (e) {
+    document.getElementById('loginErr').textContent = e.message;
+  }
+}
+
+document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function doLogout() {
+  token = null; currentUser = null;
+  localStorage.removeItem('wms_token');
+  document.getElementById('loginPage').classList.remove('hidden');
+  document.getElementById('appPage').classList.add('hidden');
+}
+
+async function initApp() {
+  if (!token) return;
+  try {
+    currentUser = await api('GET', '/auth/me');
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('appPage').classList.remove('hidden');
+    document.getElementById('sidebarUser').innerHTML = `<strong>${currentUser.name}</strong>${currentUser.role}`;
+    if (currentUser.role === 'admin') document.getElementById('adminNav').classList.remove('hidden');
+    showPage('dashboard');
+  } catch { doLogout(); }
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+}
+
+function showPage(name) {
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === name));
+  const titles = { dashboard:'Dashboard', malKabul:'Mal Kabul', transfer:'Stok Transfer', cikis:'Stok Çıkış', stok:'Stok Durumu', sevkiyat:'Sevkiyat', sayim:'Stok Sayım', urunler:'Ürünler', hareketler:'Hareketler', admin:'Yönetim' };
+  document.getElementById('topbarTitle').textContent = titles[name] || name;
+  closeSidebar();
+  const pages = { dashboard:renderDashboard, malKabul:renderMalKabul, transfer:renderTransfer, cikis:renderCikis, stok:renderStok, sevkiyat:renderSevkiyat, sayim:renderSayim, urunler:renderUrunler, hareketler:renderHareketler, admin:renderAdmin };
+  if (pages[name]) pages[name]();
+}
+
+// ── DASHBOARD ───────────────────────────────────────────────
+async function renderDashboard() {
+  const pc = document.getElementById('pageContent');
+  pc.innerHTML = '<div class="loading"><span class="spin">⟳</span>&nbsp;Yükleniyor...</div>';
+  try {
+    const [summary, movements, shipments] = await Promise.all([
+      api('GET', '/stock/summary'),
+      api('GET', '/stock/movements?'),
+      api('GET', '/shipments?status=hazirlaniyor')
+    ]);
+    const mkCount = summary.filter(r => r.status === 'mk').reduce((a, b) => a + b.qty, 0);
+    const stokCount = summary.filter(r => r.status === 'stok').reduce((a, b) => a + b.qty, 0);
+    const totalSku = new Set(summary.map(r => r.id)).size;
+    pc.innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card stat-blue"><div class="stat-lbl">Toplam SKU</div><div class="stat-val">${totalSku}</div></div>
+        <div class="stat-card stat-green"><div class="stat-lbl">Stokta</div><div class="stat-val">${stokCount}</div></div>
+        <div class="stat-card stat-yellow"><div class="stat-lbl">Mal Kabul'de</div><div class="stat-val">${mkCount}</div></div>
+        <div class="stat-card stat-red"><div class="stat-lbl">Bekleyen Sevkiyat</div><div class="stat-val">${shipments.length}</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📋 Son Hareketler</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Tarih</th><th>İşlem</th><th>Ürün</th><th>Seri No</th><th>Lokasyon</th><th>Kullanıcı</th></tr></thead>
+            <tbody>${movements.slice(0,15).map(m => `<tr>
+              <td>${fmt(m.created_at)}</td>
+              <td>${badge(m.movement_type==='mal_kabul'?'mk':m.movement_type==='transfer'?'transfer':m.movement_type==='cikis'?'cikis':'stok')}</td>
+              <td><strong>${m.sku}</strong><br><small style="color:var(--muted)">${m.product_name}</small></td>
+              <td>${m.serial_no || '-'}</td>
+              <td>${m.from_code ? m.from_code + ' → ' : ''}${m.to_code || '-'}</td>
+              <td>${m.user_name || '-'}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>`;
+  } catch (e) { pc.innerHTML = `<div class="card">${e.message}</div>`; }
+}
+
+// ── MAL KABUL ───────────────────────────────────────────────
+async function renderMalKabul() {
+  const pc = document.getElementById('pageContent');
+  let products = [];
+  try { products = await api('GET', '/products'); } catch {}
+  let scanList = [];
+  pc.innerHTML = `
+    <div class="card">
+      <div class="card-title">📥 Mal Kabul</div>
+      <div class="form-group">
+        <label>Ürün Seç</label>
+        <select id="mkProduct">
+          <option value="">-- Ürün Seçin --</option>
+          ${products.map(p => `<option value="${p.id}">${p.sku} — ${p.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Seri No Okut / Gir</label>
+        <div class="scan-wrap">
+          <input class="scan-input" id="mkScan" placeholder="Barkod okutun veya seri no girin..." autofocus/>
+          <button class="btn btn-primary" onclick="mkAddScan()">Ekle</button>
+        </div>
+        <div class="tags" id="mkTags"></div>
+      </div>
+      <div class="form-group"><label>Not</label><input id="mkNote" placeholder="Opsiyonel not..."/></div>
+      <div class="btn-group">
+        <button class="btn btn-success" onclick="doMalKabul()">✓ Mal Kabul Yap</button>
+        <button class="btn btn-outline" onclick="mkClear()">Temizle</button>
+      </div>
+    </div>
+    <div class="card" id="mkRecentCard">
+      <div class="card-title">Son Mal Kabul İşlemleri</div>
+      <div id="mkRecent" class="loading"><span class="spin">⟳</span></div>
+    </div>`;
+
+  document.getElementById('mkScan').addEventListener('keydown', e => { if (e.key === 'Enter') mkAddScan(); });
+
+  function mkAddScan() {
+    const v = document.getElementById('mkScan').value.trim();
+    if (!v) return;
+    if (scanList.includes(v)) { toast('Bu seri no zaten listede', 'error'); return; }
+    scanList.push(v);
+    renderTags();
+    document.getElementById('mkScan').value = '';
+    document.getElementById('mkScan').focus();
+  }
+  function renderTags() {
+    document.getElementById('mkTags').innerHTML = scanList.map((s, i) => `<span class="tag">${s}<span class="rm" onclick="mkRemove(${i})">×</span></span>`).join('');
+  }
+  window.mkRemove = i => { scanList.splice(i, 1); renderTags(); };
+  window.mkClear = () => { scanList = []; renderTags(); };
+
+  window.doMalKabul = async () => {
+    const product_id = document.getElementById('mkProduct').value;
+    if (!product_id) { toast('Ürün seçin', 'error'); return; }
+    if (!scanList.length) { toast('En az bir seri no girin', 'error'); return; }
+    try {
+      const r = await api('POST', '/stock/mal-kabul', { product_id: parseInt(product_id), serials: scanList, notes: document.getElementById('mkNote').value });
+      toast(r.message, 'success');
+      scanList = []; renderTags();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+
+  // Son hareketler
+  try {
+    const mv = await api('GET', '/stock/movements?type=mal_kabul');
+    document.getElementById('mkRecent').innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Tarih</th><th>Ürün</th><th>Seri No</th><th>Kullanıcı</th></tr></thead>
+      <tbody>${mv.slice(0,20).map(m=>`<tr><td>${fmt(m.created_at)}</td><td><strong>${m.sku}</strong></td><td>${m.serial_no||'-'}</td><td>${m.user_name||'-'}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+  } catch {}
+}
+
+// ── TRANSFER ────────────────────────────────────────────────
+async function renderTransfer() {
+  const pc = document.getElementById('pageContent');
+  let locations = [];
+  try { locations = await api('GET', '/stock/locations'); } catch {}
+  let scanList = [];
+  pc.innerHTML = `
+    <div class="card">
+      <div class="card-title">🔄 Stok Transfer</div>
+      <div class="form-group">
+        <label>Hedef Lokasyon</label>
+        <select id="trLoc">
+          <option value="">-- Lokasyon Seçin --</option>
+          ${locations.filter(l=>l.type!=='mk').map(l=>`<option value="${l.id}">${l.code} — ${l.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Seri No Okut</label>
+        <div class="scan-wrap">
+          <input class="scan-input" id="trScan" placeholder="Seri no okutun..."/>
+          <button class="btn btn-primary" onclick="trAdd()">Ekle</button>
+        </div>
+        <div class="tags" id="trTags"></div>
+      </div>
+      <div class="form-group"><label>Not</label><input id="trNote" placeholder="Opsiyonel..."/></div>
+      <button class="btn btn-success" onclick="doTransfer()">✓ Transfer Yap</button>
+    </div>`;
+
+  document.getElementById('trScan').addEventListener('keydown', e => { if (e.key === 'Enter') trAdd(); });
+  function trAdd() {
+    const v = document.getElementById('trScan').value.trim();
+    if (!v || scanList.includes(v)) return;
+    scanList.push(v);
+    document.getElementById('trTags').innerHTML = scanList.map((s,i)=>`<span class="tag">${s}<span class="rm" onclick="trRm(${i})">×</span></span>`).join('');
+    document.getElementById('trScan').value = '';
+    document.getElementById('trScan').focus();
+  }
+  window.trRm = i => { scanList.splice(i,1); document.getElementById('trTags').innerHTML = scanList.map((s,j)=>`<span class="tag">${s}<span class="rm" onclick="trRm(${j})">×</span></span>`).join(''); };
+  window.doTransfer = async () => {
+    const to = document.getElementById('trLoc').value;
+    if (!to || !scanList.length) { toast('Lokasyon ve seri no gerekli', 'error'); return; }
+    try {
+      const r = await api('POST', '/stock/transfer', { serials: scanList, to_location_id: parseInt(to), notes: document.getElementById('trNote').value });
+      toast(r.message, 'success'); scanList = []; document.getElementById('trTags').innerHTML = '';
+    } catch (e) { toast(e.message, 'error'); }
+  };
+}
+
+// ── ÇIKIŞ ───────────────────────────────────────────────────
+async function renderCikis() {
+  const pc = document.getElementById('pageContent');
+  let shipments = [];
+  try { shipments = await api('GET', '/shipments?status=hazirlaniyor'); } catch {}
+  let scanList = [];
+  pc.innerHTML = `
+    <div class="card">
+      <div class="card-title">📤 Stok Çıkış</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Sevkiyat (opsiyonel)</label>
+          <select id="cikisShip">
+            <option value="">-- Sevkiyata Bağla --</option>
+            ${shipments.map(s=>`<option value="${s.id}">${s.reference} — ${s.plate}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Plaka</label>
+          <input id="cikisPlate" placeholder="34 ABC 123"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Seri No Okut</label>
+        <div class="scan-wrap">
+          <input class="scan-input" id="cikisScan" placeholder="Seri no okutun..."/>
+          <button class="btn btn-primary" onclick="cikisAdd()">Ekle</button>
+        </div>
+        <div class="tags" id="cikisTags"></div>
+      </div>
+      <button class="btn btn-danger" onclick="doCikis()">✓ Çıkış Yap</button>
+    </div>`;
+
+  document.getElementById('cikisScan').addEventListener('keydown', e => { if (e.key === 'Enter') cikisAdd(); });
+  function cikisAdd() {
+    const v = document.getElementById('cikisScan').value.trim();
+    if (!v || scanList.includes(v)) return;
+    scanList.push(v);
+    document.getElementById('cikisTags').innerHTML = scanList.map((s,i)=>`<span class="tag">${s}<span class="rm" onclick="cikisRm(${i})">×</span></span>`).join('');
+    document.getElementById('cikisScan').value = ''; document.getElementById('cikisScan').focus();
+  }
+  window.cikisRm = i => { scanList.splice(i,1); document.getElementById('cikisTags').innerHTML = scanList.map((s,j)=>`<span class="tag">${s}<span class="rm" onclick="cikisRm(${j})">×</span></span>`).join(''); };
+  window.doCikis = async () => {
+    if (!scanList.length) { toast('Seri no gerekli','error'); return; }
+    const plate = document.getElementById('cikisPlate').value.trim();
+    const ship = document.getElementById('cikisShip').value;
+    try {
+      const r = await api('POST', '/stock/cikis', { serials: scanList, plate, shipment_id: ship ? parseInt(ship) : null });
+      toast(r.message, 'success'); scanList = []; document.getElementById('cikisTags').innerHTML = '';
+    } catch (e) { toast(e.message, 'error'); }
+  };
+}
+
+// ── STOK DURUM ──────────────────────────────────────────────
+async function renderStok() {
+  const pc = document.getElementById('pageContent');
+  pc.innerHTML = `
+    <div class="card">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <input id="stokQ" placeholder="SKU, isim veya seri no ara..." style="flex:1;min-width:200px;" oninput="stokSearch()"/>
+        <select id="stokStatus" onchange="stokSearch()" style="width:160px;">
+          <option value="">Tüm Statüler</option>
+          <option value="mk">Mal Kabul'de</option>
+          <option value="stok">Stokta</option>
+          <option value="cikis">Çıkış</option>
+        </select>
+        <button class="btn btn-outline" onclick="stokExport()">📥 Excel</button>
+      </div>
+      <div id="stokTable" class="loading"><span class="spin">⟳</span></div>
+    </div>`;
+
+  window.stokSearch = async () => {
+    const q = document.getElementById('stokQ').value;
+    const status = document.getElementById('stokStatus').value;
+    document.getElementById('stokTable').innerHTML = '<div class="loading"><span class="spin">⟳</span></div>';
+    try {
+      const rows = await api('GET', `/stock?q=${encodeURIComponent(q)}&status=${status}`);
+      document.getElementById('stokTable').innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>Seri No</th><th>SKU</th><th>Ürün</th><th>Statü</th><th>Lokasyon</th><th>Plaka</th><th>Güncelleme</th><th></th></tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td><strong>${r.serial_no}</strong></td>
+          <td>${r.sku}</td>
+          <td>${r.product_name}</td>
+          <td>${badge(r.status)}</td>
+          <td>${r.location_code||'-'}</td>
+          <td>${r.plate||'-'}</td>
+          <td>${fmt(r.updated_at)}</td>
+          <td><button class="btn btn-outline btn-sm" onclick="showSerialDetail('${r.serial_no}')">Detay</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    } catch (e) { document.getElementById('stokTable').innerHTML = e.message; }
+  };
+  window.stokExport = () => { window.open(API + '/products/export/excel?token=' + token); };
+  stokSearch();
+}
+
+window.showSerialDetail = async sn => {
+  try {
+    const s = await api('GET', `/stock/serial/${encodeURIComponent(sn)}`);
+    showModal(`
+      <div class="modal-title">🔍 Seri No Detay <span class="modal-close" onclick="closeModal()">×</span></div>
+      <table style="width:100%;margin-bottom:16px;">
+        <tr><td style="color:var(--muted);padding:4px 0;">Seri No</td><td><strong>${s.serial_no}</strong></td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0;">Ürün</td><td>${s.sku} — ${s.product_name}</td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0;">Statü</td><td>${badge(s.status)}</td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0;">Lokasyon</td><td>${s.location_code||'-'}</td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0;">Desi</td><td>${s.desi ? s.desi.toFixed(2) : '-'}</td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0;">Boyutlar</td><td>${s.width&&s.height&&s.depth?`${s.width}×${s.height}×${s.depth} cm`:'-'}</td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0;">Ağırlık</td><td>${s.weight ? s.weight + ' kg' : '-'}</td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0;">Plaka</td><td>${s.plate||'-'}</td></tr>
+      </table>
+      <div style="font-weight:600;margin-bottom:8px;">Hareket Geçmişi</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tarih</th><th>İşlem</th><th>Nereden</th><th>Nereye</th><th>Kullanıcı</th></tr></thead>
+        <tbody>${s.history.map(h=>`<tr>
+          <td>${fmt(h.created_at)}</td>
+          <td>${badge(h.movement_type==='mal_kabul'?'mk':h.movement_type)}</td>
+          <td>${h.from_code||'-'}</td><td>${h.to_code||'-'}</td><td>${h.user_name||'-'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`);
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+// ── SEVKİYAT ────────────────────────────────────────────────
+async function renderSevkiyat() {
+  const pc = document.getElementById('pageContent');
+  pc.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="display:flex;gap:8px;">
+          <input id="sevkPlate" placeholder="Plaka ara..." style="width:180px;" oninput="sevkSearch()"/>
+          <select id="sevkStatus" onchange="sevkSearch()" style="width:160px;">
+            <option value="">Tüm Statüler</option>
+            <option value="hazirlaniyor">Hazırlanıyor</option>
+            <option value="yuklendi">Yüklendi</option>
+            <option value="yolda">Yolda</option>
+            <option value="teslim">Teslim</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="newSevkiyat()">+ Yeni Sevkiyat</button>
+      </div>
+      <div id="sevkTable" class="loading"><span class="spin">⟳</span></div>
+    </div>`;
+
+  window.sevkSearch = async () => {
+    const status = document.getElementById('sevkStatus').value;
+    try {
+      const rows = await api('GET', `/shipments?status=${status}`);
+      document.getElementById('sevkTable').innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>Referans</th><th>Plaka</th><th>Şoför</th><th>Statü</th><th>Kalem</th><th>Tarih</th><th></th></tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td><strong>${r.reference}</strong></td>
+          <td>${r.plate}</td><td>${r.driver||'-'}</td>
+          <td>${badge(r.status)}</td>
+          <td>${r.item_count}</td>
+          <td>${fmt(r.created_at)}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick="sevkDetay(${r.id})">Detay</button>
+            ${r.status==='hazirlaniyor'?`<button class="btn btn-primary btn-sm" onclick="sevkStatusChange(${r.id},'yuklendi')">Yükle</button>`:''}
+            ${r.status==='yuklendi'?`<button class="btn btn-success btn-sm" onclick="sevkStatusChange(${r.id},'yolda')">Yola Çıkar</button>`:''}
+            ${r.status==='yolda'?`<button class="btn btn-success btn-sm" onclick="sevkStatusChange(${r.id},'teslim')">Teslim</button>`:''}
+          </td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    } catch (e) { document.getElementById('sevkTable').innerHTML = e.message; }
+  };
+
+  window.newSevkiyat = () => {
+    showModal(`
+      <div class="modal-title">🚛 Yeni Sevkiyat <span class="modal-close" onclick="closeModal()">×</span></div>
+      <div class="form-group"><label>Plaka *</label><input id="newPlate" placeholder="34 ABC 123"/></div>
+      <div class="form-group"><label>Şoför</label><input id="newDriver" placeholder="Şoför adı"/></div>
+      <div class="form-group"><label>Not</label><textarea id="newNote"></textarea></div>
+      <button class="btn btn-primary" onclick="createSevkiyat()">Oluştur</button>`);
+  };
+
+  window.createSevkiyat = async () => {
+    const plate = document.getElementById('newPlate').value.trim();
+    if (!plate) { toast('Plaka gerekli','error'); return; }
+    try {
+      const r = await api('POST', '/shipments', { plate, driver: document.getElementById('newDriver').value, notes: document.getElementById('newNote').value });
+      toast(r.message, 'success'); closeModal(); sevkSearch();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+
+  window.sevkStatusChange = async (id, status) => {
+    try { await api('PUT', `/shipments/${id}/status`, { status }); toast('Statü güncellendi','success'); sevkSearch(); } catch (e) { toast(e.message,'error'); }
+  };
+
+  window.sevkDetay = async id => {
+    const s = await api('GET', `/shipments/${id}`);
+    showModal(`
+      <div class="modal-title">📋 ${s.reference} <span class="modal-close" onclick="closeModal()">×</span></div>
+      <table style="width:100%;margin-bottom:16px;">
+        <tr><td style="color:var(--muted)">Plaka</td><td><strong>${s.plate}</strong></td></tr>
+        <tr><td style="color:var(--muted)">Şoför</td><td>${s.driver||'-'}</td></tr>
+        <tr><td style="color:var(--muted)">Statü</td><td>${badge(s.status)}</td></tr>
+        <tr><td style="color:var(--muted)">Oluşturma</td><td>${fmt(s.created_at)}</td></tr>
+        <tr><td style="color:var(--muted)">Yükleme</td><td>${fmt(s.shipped_at)}</td></tr>
+      </table>
+      <div style="font-weight:600;margin-bottom:8px;">Kalemler (${s.items.length})</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>SKU</th><th>Ürün</th><th>Seri No</th><th>Desi</th></tr></thead>
+        <tbody>${s.items.map(i=>`<tr><td>${i.sku}</td><td>${i.product_name}</td><td>${i.serial_no||'-'}</td><td>${i.desi?i.desi.toFixed(2):'-'}</td></tr>`).join('')}</tbody>
+      </table></div>`);
+  };
+
+  sevkSearch();
+}
+
+// ── SAYIM ───────────────────────────────────────────────────
+async function renderSayim() {
+  const pc = document.getElementById('pageContent');
+  let sessions = [];
+  try { sessions = await api('GET', '/counting'); } catch {}
+  pc.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-weight:600;">Sayım Oturumları</div>
+        <button class="btn btn-primary" onclick="newSayim()">+ Yeni Sayım</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Ad</th><th>Statü</th><th>Kalem</th><th>Kullanıcı</th><th>Tarih</th><th></th></tr></thead>
+        <tbody>${sessions.map(s=>`<tr>
+          <td><strong>${s.name}</strong></td>
+          <td>${badge(s.status)}</td>
+          <td>${s.item_count}</td>
+          <td>${s.user_name||'-'}</td>
+          <td>${fmt(s.created_at)}</td>
+          <td>
+            ${s.status==='acik'?`<button class="btn btn-primary btn-sm" onclick="openSayimTerminal(${s.id},'${s.name}')">Sayım Yap</button>`:''}
+            <button class="btn btn-outline btn-sm" onclick="sayimDetay(${s.id})">Karşılaştır</button>
+            ${s.status==='acik'?`<button class="btn btn-warning btn-sm" onclick="closeSayim(${s.id})">Kapat</button>`:''}
+            <a href="${API}/counting/${s.id}/export" class="btn btn-outline btn-sm">Excel</a>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+
+  window.newSayim = () => {
+    showModal(`
+      <div class="modal-title">🔢 Yeni Sayım <span class="modal-close" onclick="closeModal()">×</span></div>
+      <div class="form-group"><label>Sayım Adı *</label><input id="sayimAd" placeholder="örn: Haftalık Sayım 2024-01"/></div>
+      <button class="btn btn-primary" onclick="createSayim()">Başlat</button>`);
+  };
+  window.createSayim = async () => {
+    const name = document.getElementById('sayimAd').value.trim();
+    if (!name) { toast('Ad gerekli','error'); return; }
+    try { await api('POST', '/counting', { name }); toast('Sayım başlatıldı','success'); closeModal(); renderSayim(); } catch (e) { toast(e.message,'error'); }
+  };
+  window.closeSayim = async id => {
+    if (!confirm('Sayımı kapatmak istiyor musunuz?')) return;
+    try { await api('PUT', `/counting/${id}/close`); toast('Kapatıldı','success'); renderSayim(); } catch (e) { toast(e.message,'error'); }
+  };
+
+  window.openSayimTerminal = (id, name) => {
+    showModal(`
+      <div class="modal-title">📱 ${name} <span class="modal-close" onclick="closeModal()">×</span></div>
+      <div class="form-group">
+        <label>Seri No / SKU / Barkod Okut</label>
+        <input class="scan-input" id="sayimScan" placeholder="Okutun veya girin..." autofocus style="width:100%;"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Adet (boş=1)</label><input id="sayimQty" type="number" min="1" value="1"/></div>
+        <div class="form-group"><label>Lokasyon</label><input id="sayimLoc" placeholder="Opsiyonel lokasyon ID"/></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="doSayimScan(${id})">✓ Kaydet</button>
+      <div id="sayimResult" style="margin-top:14px;"></div>`);
+    document.getElementById('sayimScan').addEventListener('keydown', e => { if (e.key === 'Enter') doSayimScan(id); });
+  };
+
+  window.doSayimScan = async id => {
+    const sn = document.getElementById('sayimScan').value.trim();
+    const qty = parseInt(document.getElementById('sayimQty').value) || 1;
+    if (!sn) { toast('Değer girin','error'); return; }
+    try {
+      const r = await api('POST', `/counting/${id}/scan`, { serial_no: sn, qty });
+      const diff = r.difference;
+      document.getElementById('sayimResult').innerHTML = `
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;">
+          <div style="font-weight:600;">${r.product?.sku} — ${r.product?.name}</div>
+          <div style="display:flex;gap:16px;margin-top:6px;font-size:13px;">
+            <span>Sayılan: <strong>${r.counted_qty}</strong></span>
+            <span>Sistem: <strong>${r.system_qty}</strong></span>
+            <span>Fark: <strong class="${diff>0?'diff-pos':diff<0?'diff-neg':'diff-zero'}">${diff>0?'+':''}${diff}</strong></span>
+          </div>
+        </div>`;
+      document.getElementById('sayimScan').value = '';
+      document.getElementById('sayimScan').focus();
+    } catch (e) { document.getElementById('sayimResult').innerHTML = `<div style="color:var(--red)">${e.message}</div>`; }
+  };
+
+  window.sayimDetay = async id => {
+    const s = await api('GET', `/counting/${id}`);
+    const hasFark = s.items.filter(i => i.difference !== 0);
+    showModal(`
+      <div class="modal-title">📊 ${s.name} — Karşılaştırma <span class="modal-close" onclick="closeModal()">×</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <span style="background:#dcfce7;color:#166534;padding:4px 10px;border-radius:6px;font-size:12px;">Toplam: ${s.items.length}</span>
+        <span style="background:#fee2e2;color:#991b1b;padding:4px 10px;border-radius:6px;font-size:12px;">Farklı: ${hasFark.length}</span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>SKU</th><th>Ürün</th><th>Lokasyon</th><th>Sayılan</th><th>Sistem</th><th>Fark</th></tr></thead>
+        <tbody>${s.items.map(i=>`<tr>
+          <td>${i.sku}</td><td>${i.product_name}</td><td>${i.location_code||'-'}</td>
+          <td>${i.counted_qty}</td><td>${i.system_qty}</td>
+          <td class="${i.difference>0?'diff-pos':i.difference<0?'diff-neg':'diff-zero'}">${i.difference>0?'+':''}${i.difference}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`);
+  };
+}
+
+// ── ÜRÜNLER ─────────────────────────────────────────────────
+async function renderUrunler() {
+  const pc = document.getElementById('pageContent');
+  pc.innerHTML = `
+    <div class="card">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <input id="upQ" placeholder="SKU, isim veya barkod ara..." style="flex:1;min-width:200px;" oninput="upSearch()"/>
+        <button class="btn btn-primary" onclick="newUrun()">+ Yeni Ürün</button>
+        <a href="${API}/products/export/excel" class="btn btn-outline">📥 Excel</a>
+      </div>
+      <div id="upTable" class="loading"><span class="spin">⟳</span></div>
+    </div>`;
+
+  window.upSearch = async () => {
+    const q = document.getElementById('upQ').value;
+    try {
+      const rows = await api('GET', `/products?q=${encodeURIComponent(q)}`);
+      document.getElementById('upTable').innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>SKU</th><th>Barkod</th><th>İsim</th><th>Kategori</th><th>Boyut (cm)</th><th>Desi</th><th>Ağırlık</th><th></th></tr></thead>
+        <tbody>${rows.map(p=>`<tr>
+          <td><strong>${p.sku}</strong></td>
+          <td>${p.barcode||'-'}</td>
+          <td>${p.name}</td>
+          <td>${p.category||'-'}</td>
+          <td>${p.width&&p.height&&p.depth?`${p.width}×${p.height}×${p.depth}`:'-'}</td>
+          <td>${p.desi?p.desi.toFixed(2):'-'}</td>
+          <td>${p.weight?p.weight+' kg':'-'}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick="editUrun(${p.id})">Düzenle</button>
+            <button class="btn btn-outline btn-sm" onclick="urunStok(${p.id},'${p.name}')">Stok</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    } catch (e) { document.getElementById('upTable').innerHTML = e.message; }
+  };
+
+  window.newUrun = () => urunForm(null);
+  window.editUrun = async id => {
+    const p = await api('GET', `/products/${id}`);
+    urunForm(p);
+  };
+
+  window.urunStok = async (id, name) => {
+    const p = await api('GET', `/products/${id}`);
+    showModal(`
+      <div class="modal-title">📦 ${name} — Stok <span class="modal-close" onclick="closeModal()">×</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Lokasyon</th><th>Statü</th><th>Adet</th></tr></thead>
+        <tbody>${p.stock.map(s=>`<tr><td>${s.location_code} — ${s.location_name}</td><td>${badge(s.status||'stok')}</td><td><strong>${s.qty}</strong></td></tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted)">Stok yok</td></tr>'}</tbody>
+      </table></div>`);
+  };
+
+  function urunForm(p) {
+    showModal(`
+      <div class="modal-title">${p?'Ürün Düzenle':'Yeni Ürün'} <span class="modal-close" onclick="closeModal()">×</span></div>
+      <div class="form-row">
+        <div class="form-group"><label>SKU *</label><input id="fSku" value="${p?.sku||''}" ${p?'readonly':''}></div>
+        <div class="form-group"><label>Barkod</label><input id="fBarcode" value="${p?.barcode||''}"></div>
+      </div>
+      <div class="form-group"><label>İsim *</label><input id="fName" value="${p?.name||''}"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Kategori</label><input id="fCat" value="${p?.category||''}"></div>
+        <div class="form-group"><label>Birim</label><select id="fUnit"><option ${p?.unit==='ADET'?'selected':''}>ADET</option><option ${p?.unit==='KG'?'selected':''}>KG</option><option ${p?.unit==='MT'?'selected':''}>MT</option></select></div>
+      </div>
+      <div class="form-row-3">
+        <div class="form-group"><label>En (cm)</label><input id="fW" type="number" value="${p?.width||''}"></div>
+        <div class="form-group"><label>Boy (cm)</label><input id="fH" type="number" value="${p?.height||''}"></div>
+        <div class="form-group"><label>Derinlik (cm)</label><input id="fD" type="number" value="${p?.depth||''}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Ağırlık (kg)</label><input id="fWg" type="number" step="0.01" value="${p?.weight||''}"></div>
+        <div class="form-group"><label>Min. Stok</label><input id="fMin" type="number" value="${p?.min_stock||0}"></div>
+      </div>
+      <div class="form-group"><label>Açıklama</label><textarea id="fDesc">${p?.description||''}</textarea></div>
+      <button class="btn btn-primary" onclick="saveUrun(${p?.id||'null'})">Kaydet</button>`);
+  }
+
+  window.saveUrun = async id => {
+    const body = {
+      sku: document.getElementById('fSku').value.trim(),
+      barcode: document.getElementById('fBarcode').value.trim(),
+      name: document.getElementById('fName').value.trim(),
+      category: document.getElementById('fCat').value.trim(),
+      unit: document.getElementById('fUnit').value,
+      width: parseFloat(document.getElementById('fW').value)||null,
+      height: parseFloat(document.getElementById('fH').value)||null,
+      depth: parseFloat(document.getElementById('fD').value)||null,
+      weight: parseFloat(document.getElementById('fWg').value)||null,
+      min_stock: parseInt(document.getElementById('fMin').value)||0,
+      description: document.getElementById('fDesc').value.trim()
+    };
+    try {
+      if (id && id !== 'null') await api('PUT', `/products/${id}`, body);
+      else await api('POST', '/products', body);
+      toast('Kaydedildi','success'); closeModal(); upSearch();
+    } catch (e) { toast(e.message,'error'); }
+  };
+
+  upSearch();
+}
+
+// ── HAREKETLER ──────────────────────────────────────────────
+async function renderHareketler() {
+  const pc = document.getElementById('pageContent');
+  pc.innerHTML = `
+    <div class="card">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <select id="mvType" onchange="mvSearch()" style="width:180px;">
+          <option value="">Tüm İşlemler</option>
+          <option value="mal_kabul">Mal Kabul</option>
+          <option value="transfer">Transfer</option>
+          <option value="cikis">Çıkış</option>
+        </select>
+        <input id="mvFrom" type="date" onchange="mvSearch()" style="width:140px;"/>
+        <input id="mvTo" type="date" onchange="mvSearch()" style="width:140px;"/>
+      </div>
+      <div id="mvTable" class="loading"><span class="spin">⟳</span></div>
+    </div>`;
+  window.mvSearch = async () => {
+    const type = document.getElementById('mvType').value;
+    const from = document.getElementById('mvFrom').value;
+    const to = document.getElementById('mvTo').value;
+    try {
+      const rows = await api('GET', `/stock/movements?type=${type}&date_from=${from}&date_to=${to}`);
+      document.getElementById('mvTable').innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>Tarih</th><th>İşlem</th><th>SKU</th><th>Ürün</th><th>Seri No</th><th>Nereden</th><th>Nereye</th><th>Plaka</th><th>Kullanıcı</th></tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td>${fmt(r.created_at)}</td>
+          <td>${badge(r.movement_type==='mal_kabul'?'mk':r.movement_type)}</td>
+          <td>${r.sku}</td><td>${r.product_name}</td><td>${r.serial_no||'-'}</td>
+          <td>${r.from_code||'-'}</td><td>${r.to_code||'-'}</td>
+          <td>${r.plate||'-'}</td><td>${r.user_name||'-'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    } catch (e) { document.getElementById('mvTable').innerHTML = e.message; }
+  };
+  mvSearch();
+}
+
+// ── ADMİN ───────────────────────────────────────────────────
+async function renderAdmin() {
+  const pc = document.getElementById('pageContent');
+  let users = [], locs = [];
+  try { [users, locs] = await Promise.all([api('GET','/auth/users'), api('GET','/stock/locations')]); } catch {}
+  pc.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div class="card-title" style="margin:0">👥 Kullanıcılar</div>
+        <button class="btn btn-primary" onclick="newUser()">+ Yeni Kullanıcı</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Ad</th><th>Kullanıcı Adı</th><th>Rol</th><th>Durum</th><th></th></tr></thead>
+        <tbody>${users.map(u=>`<tr>
+          <td>${u.name}</td><td>${u.username}</td>
+          <td><span class="badge" style="background:#e0e7ff;color:#3730a3">${u.role}</span></td>
+          <td>${u.active?'<span style="color:var(--green)">●</span> Aktif':'<span style="color:var(--red)">●</span> Pasif'}</td>
+          <td><button class="btn btn-outline btn-sm" onclick="toggleUser(${u.id})">Aktif/Pasif</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div class="card-title" style="margin:0">📍 Lokasyonlar</div>
+        <button class="btn btn-primary" onclick="newLoc()">+ Yeni Lokasyon</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Kod</th><th>İsim</th><th>Bölge</th><th>Tip</th></tr></thead>
+        <tbody>${locs.map(l=>`<tr><td><strong>${l.code}</strong></td><td>${l.name||'-'}</td><td>${l.zone||'-'}</td><td>${badge(l.type==='mk'?'mk':l.type==='sevkiyat'?'teslim':'stok')}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+
+  window.newUser = () => showModal(`
+    <div class="modal-title">👤 Yeni Kullanıcı <span class="modal-close" onclick="closeModal()">×</span></div>
+    <div class="form-group"><label>Ad Soyad *</label><input id="uName"/></div>
+    <div class="form-group"><label>Kullanıcı Adı *</label><input id="uUser"/></div>
+    <div class="form-group"><label>Şifre *</label><input id="uPass" type="password"/></div>
+    <div class="form-group"><label>Rol</label><select id="uRole"><option value="depo">Depo</option><option value="sevkiyat">Sevkiyat</option><option value="sayim">Sayım</option><option value="admin">Admin</option></select></div>
+    <button class="btn btn-primary" onclick="createUser()">Oluştur</button>`);
+
+  window.createUser = async () => {
+    try {
+      await api('POST','/auth/users',{name:document.getElementById('uName').value,username:document.getElementById('uUser').value,password:document.getElementById('uPass').value,role:document.getElementById('uRole').value});
+      toast('Kullanıcı oluşturuldu','success'); closeModal(); renderAdmin();
+    } catch(e){toast(e.message,'error');}
+  };
+
+  window.toggleUser = async id => {
+    try { await api('PUT',`/auth/users/${id}/toggle`); renderAdmin(); } catch(e){toast(e.message,'error');}
+  };
+
+  window.newLoc = () => showModal(`
+    <div class="modal-title">📍 Yeni Lokasyon <span class="modal-close" onclick="closeModal()">×</span></div>
+    <div class="form-row">
+      <div class="form-group"><label>Kod *</label><input id="lCode" placeholder="A-01-01"/></div>
+      <div class="form-group"><label>İsim</label><input id="lName" placeholder="Raf A-01-01"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Bölge</label><input id="lZone" placeholder="A Blok"/></div>
+      <div class="form-group"><label>Tip</label><select id="lType"><option value="normal">Normal</option><option value="mk">Mal Kabul</option><option value="sevkiyat">Sevkiyat</option><option value="karantina">Karantina</option></select></div>
+    </div>
+    <button class="btn btn-primary" onclick="createLoc()">Oluştur</button>`);
+
+  window.createLoc = async () => {
+    try {
+      await api('POST','/stock/locations',{code:document.getElementById('lCode').value,name:document.getElementById('lName').value,zone:document.getElementById('lZone').value,type:document.getElementById('lType').value});
+      toast('Lokasyon oluşturuldu','success'); closeModal(); renderAdmin();
+    } catch(e){toast(e.message,'error');}
+  };
+}
+
+// ── BOOT ────────────────────────────────────────────────────
+if (token) initApp();
+</script>
+</body>
+</html>
