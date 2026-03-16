@@ -23,14 +23,37 @@ router.get('/barcode/:barcode', auth(), (req, res) => {
 
 router.get('/export/excel', auth(), (req, res) => {
   const XLSX = require('xlsx');
-  const products = db.prepare('SELECT sku, barcode, name, category, width, height, depth, weight, desi, unit, min_stock FROM products WHERE active=1').all();
-  const ws = XLSX.utils.json_to_sheet(products);
+  const products = db.prepare('SELECT sku, barcode, name, category, width, height, depth, weight, unit, min_stock FROM products WHERE active=1').all();
+  // Barkodları string'e çevir
+  const rows = products.map(p => ({ ...p, barcode: p.barcode ? String(p.barcode) : '' }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  // Sütun genişlikleri
+  ws['!cols'] = [
+    {wch:12},{wch:18},{wch:30},{wch:16},{wch:8},{wch:8},{wch:10},{wch:10},{wch:8},{wch:10}
+  ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Ürünler');
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const buf = Buffer.from(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
   res.setHeader('Content-Disposition', 'attachment; filename=urunler.xlsx');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.send(buf);
+  res.setHeader('Content-Length', buf.length);
+  res.end(buf);
+});
+
+// Excel şablon
+router.get('/template/excel', auth(), (req, res) => {
+  const XLSX = require('xlsx');
+  const headers = [{ sku:'URN001', barcode:'8680000000001', name:'Örnek Ürün 1', category:'Elektronik', width:30, height:20, depth:15, weight:2.5, unit:'ADET', min_stock:0 },
+                   { sku:'URN002', barcode:'8680000000002', name:'Örnek Ürün 2', category:'Mobilya',    width:60, height:40, depth:30, weight:5.0, unit:'ADET', min_stock:0 }];
+  const ws = XLSX.utils.json_to_sheet(headers);
+  ws['!cols'] = [{wch:12},{wch:18},{wch:30},{wch:16},{wch:8},{wch:8},{wch:10},{wch:10},{wch:8},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Şablon');
+  const buf = Buffer.from(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+  res.setHeader('Content-Disposition', 'attachment; filename=urun_sablon.xlsx');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Length', buf.length);
+  res.end(buf);
 });
 
 router.post('/import/excel', auth(['admin', 'depo']), upload.single('file'), (req, res) => {
@@ -38,25 +61,40 @@ router.post('/import/excel', auth(['admin', 'depo']), upload.single('file'), (re
   const fileData = req.file?.buffer;
   if (!fileData) return res.status(400).json({ error: 'Dosya gerekli' });
   try {
-    const wb = XLSX.read(fileData);
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-    let ok = 0, err = 0;
-    const insert = db.prepare(`INSERT OR REPLACE INTO products
+    // raw:false → tüm değerleri string olarak oku (barkod .0 sorununu önler)
+    const wb = XLSX.read(fileData, { type: 'buffer' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' });
+    let ok = 0, skip = 0, err = 0;
+    const insert = db.prepare(`INSERT OR IGNORE INTO products
       (sku, barcode, name, category, width, height, depth, weight, desi, unit, min_stock)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const update = db.prepare(`UPDATE products SET
+      barcode=?, name=?, category=?, width=?, height=?, depth=?, weight=?, desi=?, unit=?, min_stock=?, updated_at=datetime('now')
+      WHERE sku=?`);
     const tx = db.transaction(() => {
       for (const r of rows) {
+        if (!r.sku || !r.name) { err++; continue; }
         try {
-          const desi = (r.width && r.height && r.depth) ? (r.width * r.height * r.depth) / 3000 : null;
-          insert.run(r.sku||null, r.barcode||null, r.name||null, r.category||null,
-            r.width||null, r.height||null, r.depth||null, r.weight||null,
-            desi, r.unit||'ADET', r.min_stock||0);
-          ok++;
+          // Barkod: integer gibi görünen string'lerdeki .0 temizle
+          let barcode = r.barcode ? String(r.barcode).replace(/\.0$/, '').trim() : null;
+          if (!barcode) barcode = null;
+          const w = parseFloat(r.width)||null;
+          const h = parseFloat(r.height)||null;
+          const d = parseFloat(r.depth)||null;
+          const desi = (w && h && d) ? (w * h * d) / 3000 : null;
+          const existing = db.prepare('SELECT id FROM products WHERE sku=?').get(r.sku);
+          if (existing) {
+            update.run(barcode, r.name, r.category||null, w, h, d, parseFloat(r.weight)||null, desi, r.unit||'ADET', parseInt(r.min_stock)||0, r.sku);
+            skip++;
+          } else {
+            insert.run(r.sku, barcode, r.name, r.category||null, w, h, d, parseFloat(r.weight)||null, desi, r.unit||'ADET', parseInt(r.min_stock)||0);
+            ok++;
+          }
         } catch(e) { console.error('Row error:', e.message); err++; }
       }
     });
     tx();
-    res.json({ message: `${ok} ürün içe aktarıldı${err ? ', ' + err + ' hata' : ''}` });
+    res.json({ message: `${ok} yeni ürün eklendi, ${skip} güncellendi${err ? ', '+err+' satır atlandı' : ''}` });
   } catch(e) {
     res.status(500).json({ error: 'Dosya okunamadı: ' + e.message });
   }
