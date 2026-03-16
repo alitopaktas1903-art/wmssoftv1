@@ -118,27 +118,51 @@ router.post('/transfer', auth(['admin', 'depo']), (req, res) => {
 
 // ── STOK ÇIKIŞ / SEVKİYAT ────────────────────────────────────
 router.post('/cikis', auth(['admin', 'sevkiyat', 'depo']), (req, res) => {
-  const { serials, shipment_id, plate, notes } = req.body;
+  const { serials, shipment_id, plate, notes, force_karantina } = req.body;
   if (!serials?.length) return res.status(400).json({ error: 'Seri no gerekli' });
+
+  // Karantina kontrolü — force_karantina=true gönderilmediyse uyar
+  if (!force_karantina) {
+    const karantinaList = [];
+    for (const sn of serials) {
+      const serial = db.prepare(`
+        SELECT s.serial_no, l.code as loc_code, l.type as loc_type
+        FROM serials s LEFT JOIN locations l ON s.location_id=l.id
+        WHERE s.serial_no=?
+      `).get(sn.trim());
+      if (serial?.loc_type === 'karantina') karantinaList.push(serial.serial_no);
+    }
+    if (karantinaList.length > 0) {
+      return res.status(400).json({
+        error: 'Karantina uyarısı',
+        karantina: true,
+        items: karantinaList,
+        message: `${karantinaList.length} adet karantinada: ${karantinaList.join(', ')}`
+      });
+    }
+  }
 
   const sevkLoc = db.prepare("SELECT id FROM locations WHERE type='sevkiyat' LIMIT 1").get();
 
   const tx = db.transaction(() => {
-    let ok = 0;
+    let ok = 0, skip = 0;
     for (const sn of serials) {
-      const serial = db.prepare("SELECT * FROM serials WHERE serial_no = ? AND status IN ('mk','stok')").get(sn.trim());
-      if (!serial) continue;
-      db.prepare(`UPDATE serials SET status='cikis', plate=?, location_id=?, updated_at=datetime('now') WHERE id=?`).run(plate || null, sevkLoc?.id || null, serial.id);
-      db.prepare(`INSERT INTO stock_movements (serial_id, product_id, from_location_id, to_location_id, movement_type, user_id, notes, plate, reference) VALUES (?,?,?,?,'cikis',?,?,?,?)`).run(serial.id, serial.product_id, serial.location_id, sevkLoc?.id || null, req.user.id, notes || null, plate || null, shipment_id ? String(shipment_id) : null);
+      const serial = db.prepare("SELECT * FROM serials WHERE serial_no=? AND status IN ('mk','stok')").get(sn.trim());
+      if (!serial) { skip++; continue; }
+      db.prepare(`UPDATE serials SET status='cikis', plate=?, location_id=?, updated_at=datetime('now') WHERE id=?`)
+        .run(plate||null, sevkLoc?.id||null, serial.id);
+      db.prepare(`INSERT INTO stock_movements (serial_id, product_id, from_location_id, to_location_id, movement_type, user_id, notes, plate, reference)
+        VALUES (?,?,?,?,'cikis',?,?,?,?)`)
+        .run(serial.id, serial.product_id, serial.location_id, sevkLoc?.id||null, req.user.id, notes||null, plate||null, shipment_id?String(shipment_id):null);
       if (shipment_id) {
         db.prepare('INSERT OR IGNORE INTO shipment_items (shipment_id, serial_id, product_id) VALUES (?,?,?)').run(shipment_id, serial.id, serial.product_id);
       }
       ok++;
     }
-    return ok;
+    return { ok, skip };
   });
-  const ok = tx();
-  res.json({ message: `${ok} adet çıkış yapıldı` });
+  const result = tx();
+  res.json({ message: `${result.ok} adet çıkış yapıldı${result.skip?' ('+result.skip+' bulunamadı)':''}` });
 });
 
 // Lokasyon listesi

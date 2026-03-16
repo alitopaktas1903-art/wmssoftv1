@@ -40,7 +40,18 @@ router.post('/', auth(['admin', 'sevkiyat', 'depo']), (req, res) => {
 
 // Statü güncelle
 router.put('/:id/status', auth(['admin', 'sevkiyat']), (req, res) => {
-  const { status } = req.body;
+  const { status, force } = req.body;
+  // Yüklendi statüsüne geçerken kalem kontrolü
+  if (status === 'yuklendi') {
+    const itemCount = db.prepare('SELECT COUNT(*) as cnt FROM shipment_items WHERE shipment_id=?').get(req.params.id).cnt;
+    if (itemCount === 0 && !force) {
+      return res.status(400).json({
+        error: 'Bu sevkiyatta hiç ürün yok',
+        empty: true,
+        message: 'Sevkiyat boş! Devam etmek istiyor musunuz?'
+      });
+    }
+  }
   const shipped_at = status === 'yuklendi' ? "datetime('now')" : 'NULL';
   db.prepare(`UPDATE shipments SET status=?, shipped_at=${shipped_at} WHERE id=?`).run(status, req.params.id);
   res.json({ message: 'Statü güncellendi' });
