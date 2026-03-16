@@ -2,7 +2,6 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// Render persistent disk /data klasörünü kullan, yoksa local
 const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
@@ -11,6 +10,11 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    active INTEGER DEFAULT 1
+  );
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -28,6 +32,7 @@ db.exec(`
     description TEXT,
     width REAL, height REAL, depth REAL, weight REAL, desi REAL,
     category TEXT, unit TEXT DEFAULT 'ADET', min_stock INTEGER DEFAULT 0,
+    seri_takip INTEGER DEFAULT 1,
     active INTEGER DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
@@ -44,6 +49,7 @@ db.exec(`
     product_id INTEGER NOT NULL REFERENCES products(id),
     location_id INTEGER REFERENCES locations(id),
     status TEXT NOT NULL DEFAULT 'mk' CHECK(status IN ('mk','stok','transfer','cikis','sayim')),
+    quantity INTEGER DEFAULT 1,
     plate TEXT, notes TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
@@ -92,7 +98,7 @@ db.exec(`
   );
 
   INSERT OR IGNORE INTO users (username, password, name, role)
-VALUES ('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'Sistem Admin', 'admin');
+  VALUES ('admin', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Sistem Admin', 'admin');
 
   INSERT OR IGNORE INTO locations (code, name, type) VALUES ('MK', 'Mal Kabul', 'mk');
   INSERT OR IGNORE INTO locations (code, name, type) VALUES ('SEVK', 'Sevkiyat', 'sevkiyat');
@@ -100,11 +106,30 @@ VALUES ('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
   INSERT OR IGNORE INTO locations (code, name, type) VALUES ('A-01-02', 'Raf A-01-02', 'normal');
   INSERT OR IGNORE INTO locations (code, name, type) VALUES ('B-01-01', 'Raf B-01-01', 'normal');
 `);
-// Admin şifresini her başlangıçta sıfırla
+
+// Migration — mevcut DB için
+const migrations = [
+  'ALTER TABLE products ADD COLUMN seri_takip INTEGER DEFAULT 1',
+  'ALTER TABLE serials ADD COLUMN quantity INTEGER DEFAULT 1',
+  `CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    active INTEGER DEFAULT 1
+  )`,
+];
+for (const m of migrations) {
+  try { db.exec(m); } catch(e) { /* zaten varsa geç */ }
+}
+
+// Admin şifresini düzelt
 try {
   const bcrypt = require('bcryptjs');
-  const hash = bcrypt.hashSync('password', 10);
-  db.prepare("UPDATE users SET password=? WHERE username='admin'").run(hash);
-  console.log('Admin şifresi sıfırlandı');
-} catch(e) { console.error('Şifre sıfırlama hatası:', e.message); }
+  const admin = db.prepare("SELECT * FROM users WHERE username='admin'").get();
+  if (admin && !admin.password.startsWith('$2')) {
+    db.prepare('UPDATE users SET password=? WHERE username=?')
+      .run(bcrypt.hashSync('password', 10), 'admin');
+    console.log('Admin şifresi düzeltildi');
+  }
+} catch(e) { console.error('Migration error:', e.message); }
+
 module.exports = db;

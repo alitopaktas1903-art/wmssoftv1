@@ -3,7 +3,6 @@ const db = require('../db');
 const { auth } = require('../middleware/auth');
 const router = express.Router();
 
-// Sayım oturumları
 router.get('/', auth(), (req, res) => {
   const sessions = db.prepare(`
     SELECT cs.*, u.name as user_name,
@@ -14,7 +13,6 @@ router.get('/', auth(), (req, res) => {
   res.json(sessions);
 });
 
-// Yeni sayım oturumu
 router.post('/', auth(['admin', 'depo', 'sayim']), (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Sayım adı gerekli' });
@@ -22,50 +20,68 @@ router.post('/', auth(['admin', 'depo', 'sayim']), (req, res) => {
   res.json({ id: r.lastInsertRowid, message: 'Sayım oturumu açıldı' });
 });
 
-// Sayım kalemi ekle / güncelle (el terminali okutma)
+// Sayım kalemi ekle — düzeltildi, her okutmada çalışır
 router.post('/:id/scan', auth(['admin', 'depo', 'sayim']), (req, res) => {
   const { serial_no, product_id, location_id, qty } = req.body;
   const session = db.prepare("SELECT * FROM count_sessions WHERE id=? AND status='acik'").get(req.params.id);
   if (!session) return res.status(400).json({ error: 'Aktif sayım oturumu yok' });
 
+  let pid = product_id || null;
+  let sn = serial_no ? serial_no.trim() : null;
+
   // Seri no ile ürün bul
-  let pid = product_id;
-  let sn = serial_no;
   if (sn && !pid) {
     const serial = db.prepare('SELECT product_id FROM serials WHERE serial_no=?').get(sn);
-    if (serial) pid = serial.product_id;
-    else {
-      // Barkod/SKU olarak dene
+    if (serial) {
+      pid = serial.product_id;
+    } else {
+      // Barkod veya SKU dene
       const prod = db.prepare('SELECT id FROM products WHERE barcode=? OR sku=?').get(sn, sn);
       if (prod) { pid = prod.id; sn = null; }
     }
   }
-  if (!pid) return res.status(404).json({ error: 'Ürün tanımlanamadı' });
 
-  // Sistem stok miktarını hesapla
+  if (!pid) return res.status(404).json({ error: 'Ürün tanımlanamadı: ' + (sn||'') });
+
+  // Sistem stok miktarı
   const systemQty = db.prepare(`
     SELECT COUNT(*) as cnt FROM serials
     WHERE product_id=? AND status IN ('mk','stok')
-    ${location_id ? 'AND location_id=?' : ''}
-  `).get(pid, ...(location_id ? [location_id] : [])).cnt;
+  `).get(pid).cnt;
 
-  // Var ise güncelle, yoksa ekle
-  const existing = db.prepare('SELECT * FROM count_items WHERE session_id=? AND product_id=? AND (location_id=? OR (location_id IS NULL AND ? IS NULL))').get(req.params.id, pid, location_id || null, location_id || null);
+  const counted = qty !== undefined ? parseInt(qty) : 1;
 
-  const counted = qty !== undefined ? parseInt(qty) : (existing ? existing.counted_qty + 1 : 1);
-  const diff = counted - systemQty;
+  // Aynı session + ürün + lokasyon kombinasyonu varsa güncelle, yoksa ekle
+  const locId = location_id || null;
+  const existing = db.prepare(`
+    SELECT * FROM count_items
+    WHERE session_id=? AND product_id=?
+    AND (location_id IS ? OR location_id=?)
+  `).get(req.params.id, pid, locId, locId);
 
+  let newCounted;
   if (existing) {
-    db.prepare('UPDATE count_items SET counted_qty=?, system_qty=?, difference=?, counted_at=datetime("now") WHERE id=?').run(counted, systemQty, diff, existing.id);
+    newCounted = existing.counted_qty + counted;
+    const diff = newCounted - systemQty;
+    db.prepare('UPDATE count_items SET counted_qty=?, system_qty=?, difference=?, counted_at=datetime("now") WHERE id=?')
+      .run(newCounted, systemQty, diff, existing.id);
   } else {
-    db.prepare('INSERT INTO count_items (session_id, product_id, location_id, serial_no, counted_qty, system_qty, difference, user_id) VALUES (?,?,?,?,?,?,?,?)').run(req.params.id, pid, location_id || null, sn || null, counted, systemQty, diff, req.user.id);
+    newCounted = counted;
+    const diff = newCounted - systemQty;
+    db.prepare('INSERT INTO count_items (session_id, product_id, location_id, serial_no, counted_qty, system_qty, difference, user_id) VALUES (?,?,?,?,?,?,?,?)')
+      .run(req.params.id, pid, locId, sn, newCounted, systemQty, diff, req.user.id);
   }
 
   const product = db.prepare('SELECT sku, name, desi FROM products WHERE id=?').get(pid);
-  res.json({ message: 'Kaydedildi', product, counted_qty: counted, system_qty: systemQty, difference: diff });
+  res.json({
+    message: 'Kaydedildi',
+    product,
+    counted_qty: newCounted,
+    system_qty: systemQty,
+    difference: newCounted - systemQty
+  });
 });
 
-// Sayım detayı
 router.get('/:id', auth(), (req, res) => {
   const session = db.prepare('SELECT * FROM count_sessions WHERE id=?').get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Bulunamadı' });
@@ -81,13 +97,11 @@ router.get('/:id', auth(), (req, res) => {
   res.json({ ...session, items });
 });
 
-// Sayım kapat
 router.put('/:id/close', auth(['admin']), (req, res) => {
   db.prepare("UPDATE count_sessions SET status='kapali', closed_at=datetime('now') WHERE id=?").run(req.params.id);
   res.json({ message: 'Sayım kapatıldı' });
 });
 
-// Sayım onayla (farkları stoka uygula)
 router.put('/:id/approve', auth(['admin']), (req, res) => {
   const session = db.prepare("SELECT * FROM count_sessions WHERE id=? AND status='kapali'").get(req.params.id);
   if (!session) return res.status(400).json({ error: 'Önce sayımı kapatın' });
@@ -95,7 +109,6 @@ router.put('/:id/approve', auth(['admin']), (req, res) => {
   res.json({ message: 'Sayım onaylandı' });
 });
 
-// Excel export
 router.get('/:id/export', auth(), (req, res) => {
   const XLSX = require('xlsx');
   const items = db.prepare(`
