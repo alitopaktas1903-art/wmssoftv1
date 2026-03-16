@@ -161,7 +161,7 @@ textarea{resize:vertical;min-height:80px;}
 </div>
 
 <script>
-const API = 'https://wmssoftv2.onrender.com/api';
+const API = 'BACKEND_URL_BURAYA/api';
 let token = localStorage.getItem('wms_token');
 let currentUser = null;
 
@@ -427,16 +427,40 @@ window.cikisRm = function(i) {
   const tags = document.getElementById('cikisTags');
   if (tags) tags.innerHTML = window._cikisList.map((s,j)=>`<span class="tag">${s}<span class="rm" onclick="cikisRm(${j})">×</span></span>`).join('');
 };
-window.doCikis = async function() {
+window.doCikis = async function(force_karantina) {
   if (!window._cikisList.length) { toast('Seri no gerekli','error'); return; }
   const plate = document.getElementById('cikisPlate')?.value.trim()||'';
   const ship = document.getElementById('cikisShip')?.value||'';
   try {
-    const r = await api('POST','/stock/cikis',{serials:window._cikisList,plate,shipment_id:ship?parseInt(ship):null});
+    const r = await api('POST','/stock/cikis',{
+      serials: window._cikisList,
+      plate,
+      shipment_id: ship ? parseInt(ship) : null,
+      force_karantina: !!force_karantina
+    });
     toast(r.message,'success');
     window._cikisList = [];
     const tags = document.getElementById('cikisTags'); if (tags) tags.innerHTML = '';
-  } catch(e) { toast(e.message,'error'); }
+  } catch(e) {
+    // Karantina uyarısı
+    if (e.message.includes('Karantina') || e.message.includes('karantina')) {
+      showModal(`
+        <div class="modal-title" style="color:var(--red);">⚠️ Karantina Uyarısı <button class="modal-close" onclick="closeModal()">×</button></div>
+        <div style="padding:14px 0;">
+          <p style="margin-bottom:12px;">Aşağıdaki seri numaralar <strong style="color:var(--red);">karantina</strong> lokasyonunda bulunuyor:</p>
+          <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:14px;">
+            ${e.message.replace('Karantina uyarısı — ','').replace('Karantina uyarısı: ','')}
+          </div>
+          <p style="font-size:13px;color:var(--muted);">Karantinadan çıkış yapmak istediğinizden emin misiniz?</p>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-danger" onclick="closeModal();doCikis(true)">⚠️ Evet, Karantinadan Çıkar</button>
+          <button class="btn btn-outline" onclick="closeModal()">İptal</button>
+        </div>`);
+    } else {
+      toast(e.message,'error');
+    }
+  }
 };
 
 async function renderCikis() {
@@ -589,8 +613,24 @@ async function renderSevkiyat() {
     } catch(e) { toast(e.message,'error'); }
   };
 
-  window.sevkSt = async (id, status) => {
-    try { await api('PUT',`/shipments/${id}/status`,{status}); toast('Güncellendi','success'); sevkSearch(); } catch(e) { toast(e.message,'error'); }
+  window.sevkSt = async (id, status, force) => {
+    try {
+      await api('PUT',`/shipments/${id}/status`,{status, force: !!force});
+      toast('Statü güncellendi','success'); sevkSearch();
+    } catch(e) {
+      if (e.message.includes('boş') || e.message.includes('empty') || e.message.includes('hiç ürün')) {
+        // Boş sevkiyat uyarısı
+        showModal(`
+          <div class="modal-title" style="color:var(--yellow);">⚠️ Boş Sevkiyat <button class="modal-close" onclick="closeModal()">×</button></div>
+          <div style="padding:16px 0;font-size:15px;color:var(--text);">Bu sevkiyatta <strong>hiç ürün yok</strong>.<br/>Yine de yüklendi olarak işaretlemek istiyor musunuz?</div>
+          <div class="btn-group">
+            <button class="btn btn-warning" onclick="closeModal();sevkSt(${id},'${status}',true)">Evet, Devam Et</button>
+            <button class="btn btn-outline" onclick="closeModal()">İptal</button>
+          </div>`);
+      } else {
+        toast(e.message,'error');
+      }
+    }
   };
 
   window.sevkDetay = async id => {
@@ -787,20 +827,20 @@ async function renderUrunler() {
   };
 
   window.excelSablon = () => {
-    const rows = [
-      ['sku','barcode','name','category','width','height','depth','weight','unit','min_stock'],
-      ['URN001','8680000000001','Örnek Ürün','Elektronik','30','20','15','2.5','ADET','0']
-    ];
-    const csv = rows.map(r=>r.join(',')).join('\n');
-    const blob = new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='urun_sablon.csv';a.click();
+    // Backend'den xlsx şablon indir
+    fetch(API+'/products/template/excel',{headers:{Authorization:'Bearer '+token}})
+      .then(r=>r.blob()).then(b=>{
+        const a=document.createElement('a');a.href=URL.createObjectURL(b);
+        a.download='urun_sablon.xlsx';a.click();
+      });
   };
 
   window.excelImportModal = () => showModal(`
     <div class="modal-title">📥 Excel / CSV Yükle <button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="info-box">
       <strong>Kolon sırası:</strong> sku, barcode, name, category, width, height, depth, weight, unit, min_stock<br/>
-      <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="excelSablon()">📋 Şablon İndir</button>
+      <div style="margin-top:6px;font-size:12px;color:#1e40af;">⚠️ Her satır benzersiz SKU olmalı. Aynı SKU varsa güncellenir.</div>
+      <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="excelSablon()">📋 xlsx Şablon İndir</button>
     </div>
     <div class="form-group"><label>Dosya Seç (.xlsx veya .csv)</label><input type="file" id="importFile" accept=".xlsx,.csv" style="padding:6px;"/></div>
     <button class="btn btn-primary" onclick="doExcelImport()">Yükle</button>
