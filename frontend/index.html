@@ -161,7 +161,7 @@ textarea{resize:vertical;min-height:80px;}
 </div>
 
 <script>
-const API = 'https://wmssoftv2.onrender.com/api';
+const API = 'BACKEND_URL_BURAYA/api';
 let token = localStorage.getItem('wms_token');
 let currentUser = null;
 
@@ -826,13 +826,18 @@ async function renderUrunler() {
       .then(r=>r.blob()).then(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='urunler.xlsx';a.click();});
   };
 
-  window.excelSablon = () => {
-    // Backend'den xlsx şablon indir
-    fetch(API+'/products/template/excel',{headers:{Authorization:'Bearer '+token}})
-      .then(r=>r.blob()).then(b=>{
-        const a=document.createElement('a');a.href=URL.createObjectURL(b);
-        a.download='urun_sablon.xlsx';a.click();
-      });
+  window.excelSablon = async () => {
+    try {
+      const r = await fetch(API+'/products/template/excel', {headers:{Authorization:'Bearer '+token}});
+      if (!r.ok) { const d=await r.json(); throw new Error(d.error||'Hata'); }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'urun_sablon.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch(e) { toast('Şablon indirilemedi: '+e.message, 'error'); }
   };
 
   window.excelImportModal = () => showModal(`
