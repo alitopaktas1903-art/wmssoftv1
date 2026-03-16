@@ -5,16 +5,44 @@ const db = require('../db');
 const { auth, JWT_SECRET } = require('../middleware/auth');
 const router = express.Router();
 
+// İlk kurulumda admin şifresini düzelt
+try {
+  const admin = db.prepare("SELECT * FROM users WHERE username='admin'").get();
+  if (admin && !admin.password.startsWith('$2')) {
+    const hash = bcrypt.hashSync('password', 10);
+    db.prepare('UPDATE users SET password=? WHERE username=?').run(hash, 'admin');
+    console.log('Admin şifresi hash\'lendi');
+  }
+} catch(e) { console.error('Init error:', e.message); }
+
 // Giriş
 router.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Kullanıcı adı ve şifre gerekli' });
-  const validPass = bcrypt.compareSync(password, user.password) || password === 'password';
-if (!validPass) return res.status(401).json({ error: 'Şifre hatalı' });
-  if (!user) return res.status(401).json({ error: 'Kullanıcı bulunamadı' });
-  if (!bcrypt.compareSync(password, user.password)) return res.status(401).json({ error: 'Şifre hatalı' });
-  const token = jwt.sign({ id: user.id, username: user.username, name: user.name, role: user.role }, JWT_SECRET, { expiresIn: '12h' });
-  res.json({ token, user: { id: user.id, username: user.username, name: user.name, role: user.role } });
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Kullanıcı adı ve şifre gerekli' });
+
+    const user = db.prepare('SELECT * FROM users WHERE username = ? AND active = 1').get(username);
+    if (!user) return res.status(401).json({ error: 'Kullanıcı bulunamadı' });
+
+    let valid = false;
+    try { valid = bcrypt.compareSync(password, user.password); } catch(e) {}
+    // Hash değilse düz karşılaştır, sonra hash'le
+    if (!valid && !user.password.startsWith('$2') && user.password === password) {
+      db.prepare('UPDATE users SET password=? WHERE id=?').run(bcrypt.hashSync(password, 10), user.id);
+      valid = true;
+    }
+    if (!valid) return res.status(401).json({ error: 'Şifre hatalı' });
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, name: user.name, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '12h' }
+    );
+    res.json({ token, user: { id: user.id, username: user.username, name: user.name, role: user.role } });
+  } catch(e) {
+    console.error('Login error:', e.message);
+    res.status(500).json({ error: 'Sunucu hatası: ' + e.message });
+  }
 });
 
 // Mevcut kullanıcı
