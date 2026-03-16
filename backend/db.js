@@ -92,7 +92,7 @@ db.exec(`
   );
 
   INSERT OR IGNORE INTO users (username, password, name, role)
-  VALUES ('admin', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Sistem Admin', 'admin');
+VALUES ('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'Sistem Admin', 'admin');
 
   INSERT OR IGNORE INTO locations (code, name, type) VALUES ('MK', 'Mal Kabul', 'mk');
   INSERT OR IGNORE INTO locations (code, name, type) VALUES ('SEVK', 'Sevkiyat', 'sevkiyat');
