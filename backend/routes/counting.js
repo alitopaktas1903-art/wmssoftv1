@@ -20,66 +20,56 @@ router.post('/', auth(['admin', 'depo', 'sayim']), (req, res) => {
   res.json({ id: r.lastInsertRowid, message: 'Sayım oturumu açıldı' });
 });
 
-// Sayım kalemi ekle — düzeltildi, her okutmada çalışır
+// Sayım kalemi ekle
 router.post('/:id/scan', auth(['admin', 'depo', 'sayim']), (req, res) => {
-  const { serial_no, product_id, location_id, qty } = req.body;
-  const session = db.prepare("SELECT * FROM count_sessions WHERE id=? AND status='acik'").get(req.params.id);
-  if (!session) return res.status(400).json({ error: 'Aktif sayım oturumu yok' });
+  try {
+    const { serial_no, product_id, location_id, qty } = req.body;
+    const session = db.prepare("SELECT * FROM count_sessions WHERE id=? AND status='acik'").get(req.params.id);
+    if (!session) return res.status(400).json({ error: 'Aktif sayım oturumu bulunamadı' });
 
-  let pid = product_id || null;
-  let sn = serial_no ? serial_no.trim() : null;
+    let pid = product_id || null;
+    let sn = serial_no ? String(serial_no).trim() : null;
+    if (!sn) return res.status(400).json({ error: 'Seri no / SKU / EAN gerekli' });
 
-  // Seri no ile ürün bul
-  if (sn && !pid) {
-    const serial = db.prepare('SELECT product_id FROM serials WHERE serial_no=?').get(sn);
-    if (serial) {
-      pid = serial.product_id;
-    } else {
-      // Barkod veya SKU dene
-      const prod = db.prepare('SELECT id FROM products WHERE barcode=? OR sku=?').get(sn, sn);
+    // Önce seri no olarak bak
+    if (!pid) {
+      const serial = db.prepare('SELECT product_id FROM serials WHERE serial_no=?').get(sn);
+      if (serial) pid = serial.product_id;
+    }
+    // Sonra SKU veya EAN olarak bak
+    if (!pid) {
+      const prod = db.prepare('SELECT id FROM products WHERE sku=? OR barcode=?').get(sn, sn);
       if (prod) { pid = prod.id; sn = null; }
     }
+
+    if (!pid) return res.status(404).json({ error: `"${sn}" — ürün bulunamadı. SKU, seri no veya EAN kontrol edin.` });
+
+    const systemQty = db.prepare("SELECT COUNT(*) as cnt FROM serials WHERE product_id=? AND status IN ('mk','stok')").get(pid).cnt;
+    const counted = qty ? parseInt(qty) : 1;
+    const locId = location_id ? parseInt(location_id) : null;
+
+    const existing = db.prepare(`
+      SELECT * FROM count_items WHERE session_id=? AND product_id=?
+      AND ((?  IS NULL AND location_id IS NULL) OR location_id=?)
+    `).get(req.params.id, pid, locId, locId);
+
+    let newCounted;
+    if (existing) {
+      newCounted = existing.counted_qty + counted;
+      db.prepare('UPDATE count_items SET counted_qty=?, system_qty=?, difference=?, counted_at=datetime("now") WHERE id=?')
+        .run(newCounted, systemQty, newCounted - systemQty, existing.id);
+    } else {
+      newCounted = counted;
+      db.prepare('INSERT INTO count_items (session_id, product_id, location_id, serial_no, counted_qty, system_qty, difference, user_id) VALUES (?,?,?,?,?,?,?,?)')
+        .run(req.params.id, pid, locId, serial_no ? String(serial_no).trim() : null, newCounted, systemQty, newCounted - systemQty, req.user.id);
+    }
+
+    const product = db.prepare('SELECT sku, name, desi FROM products WHERE id=?').get(pid);
+    res.json({ message: 'Kaydedildi', product, counted_qty: newCounted, system_qty: systemQty, difference: newCounted - systemQty });
+  } catch(e) {
+    console.error('Sayım scan error:', e);
+    res.status(500).json({ error: 'Sunucu hatası: ' + e.message });
   }
-
-  if (!pid) return res.status(404).json({ error: 'Ürün tanımlanamadı: ' + (sn||'') });
-
-  // Sistem stok miktarı
-  const systemQty = db.prepare(`
-    SELECT COUNT(*) as cnt FROM serials
-    WHERE product_id=? AND status IN ('mk','stok')
-  `).get(pid).cnt;
-
-  const counted = qty !== undefined ? parseInt(qty) : 1;
-
-  // Aynı session + ürün + lokasyon kombinasyonu varsa güncelle, yoksa ekle
-  const locId = location_id || null;
-  const existing = db.prepare(`
-    SELECT * FROM count_items
-    WHERE session_id=? AND product_id=?
-    AND (location_id IS ? OR location_id=?)
-  `).get(req.params.id, pid, locId, locId);
-
-  let newCounted;
-  if (existing) {
-    newCounted = existing.counted_qty + counted;
-    const diff = newCounted - systemQty;
-    db.prepare('UPDATE count_items SET counted_qty=?, system_qty=?, difference=?, counted_at=datetime("now") WHERE id=?')
-      .run(newCounted, systemQty, diff, existing.id);
-  } else {
-    newCounted = counted;
-    const diff = newCounted - systemQty;
-    db.prepare('INSERT INTO count_items (session_id, product_id, location_id, serial_no, counted_qty, system_qty, difference, user_id) VALUES (?,?,?,?,?,?,?,?)')
-      .run(req.params.id, pid, locId, sn, newCounted, systemQty, diff, req.user.id);
-  }
-
-  const product = db.prepare('SELECT sku, name, desi FROM products WHERE id=?').get(pid);
-  res.json({
-    message: 'Kaydedildi',
-    product,
-    counted_qty: newCounted,
-    system_qty: systemQty,
-    difference: newCounted - systemQty
-  });
 });
 
 router.get('/:id', auth(), (req, res) => {
@@ -121,10 +111,11 @@ router.get('/:id/export', auth(), (req, res) => {
   const ws = XLSX.utils.json_to_sheet(items);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sayım');
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const buf = Buffer.from(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
   res.setHeader('Content-Disposition', 'attachment; filename=sayim.xlsx');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.send(buf);
+  res.setHeader('Content-Length', buf.length);
+  res.end(buf);
 });
 
 module.exports = router;
