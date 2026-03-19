@@ -161,7 +161,7 @@ textarea{resize:vertical;min-height:80px;}
 </div>
 
 <script>
-const API = 'https://wmssoftv2.onrender.com/api';
+const API = 'BACKEND_URL_BURAYA/api';
 let token = localStorage.getItem('wms_token');
 let currentUser = null;
 
@@ -856,13 +856,27 @@ async function renderUrunler() {
     if (!file) { toast('Dosya seçin','error'); return; }
     const fd = new FormData();
     fd.append('file', file);
+    document.getElementById('importResult').innerHTML = '<div style="color:var(--muted);">Yükleniyor...</div>';
     try {
       const r = await fetch(API+'/products/import/excel',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
-      document.getElementById('importResult').innerHTML = `<div style="color:var(--green);font-weight:600;">✓ ${data.message}</div>`;
-      setTimeout(()=>{ closeModal(); upSearch(); },1500);
-    } catch(e) { document.getElementById('importResult').innerHTML = `<div style="color:var(--red);">${e.message}</div>`; }
+      let html = `<div style="color:var(--green);font-weight:600;margin-bottom:8px;">✓ ${data.message}</div>`;
+      if (data.errors && data.errors.length) {
+        html += `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;font-size:12px;">
+          <div style="font-weight:600;color:var(--red);margin-bottom:6px;">⚠️ ${data.errors.length} Hata:</div>
+          ${data.errors.map(e=>`<div style="padding:2px 0;color:var(--red);">• ${e}</div>`).join('')}
+        </div>`;
+      }
+      document.getElementById('importResult').innerHTML = html;
+      if (!data.errors || !data.errors.length) {
+        setTimeout(()=>{ closeModal(); upSearch(); },1500);
+      } else {
+        upSearch(); // Başarılıları yükle, hataları göster
+      }
+    } catch(e) {
+      document.getElementById('importResult').innerHTML = `<div style="color:var(--red);">${e.message}</div>`;
+    }
   };
 
   window.newUrun = () => urunForm(null);
