@@ -696,74 +696,112 @@ async function renderSayim() {
     try { await api('PUT',`/counting/${id}/close`); toast('Kapatıldı','success'); renderSayim(); } catch(e) { toast(e.message,'error'); }
   };
 
+  // Sayım terminal — global state
+  window._sayimId = null;
+
   window.openSayimTerminal = async (id, name) => {
+    window._sayimId = id;
     let locs = [];
     try { locs = await api('GET','/stock/locations'); } catch {}
-    const locOpts = `<option value="">-- Lokasyon Seç (opsiyonel) --</option>${locs.map(l=>`<option value="${l.id}">${l.code} — ${l.name}</option>`).join('')}`;
+    const locOpts = `<option value="">-- Lokasyon (opsiyonel) --</option>${locs.map(l=>`<option value="${l.id}">${l.code} — ${l.name}</option>`).join('')}`;
     showModal(`
       <div class="modal-title">📱 ${name} <button class="modal-close" onclick="closeModal()">×</button></div>
-      <div class="info-box">Seri no, SKU veya barkod okutun. Her okutmada 1 adet eklenir.</div>
-      <div class="form-group">
-        <label>Seri No / SKU / Barkod</label>
-        <input class="scan-input" id="sayimScan" placeholder="Okutun veya girin..." autofocus style="width:100%;"/>
+      <div class="info-box">Seri no, SKU veya EAN okutun. Her okutmada 1 adet eklenir.</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input class="scan-input" id="sayimScan" placeholder="Okutun veya girin..." style="flex:1;font-size:16px;"/>
+        <button class="btn btn-primary" onclick="doSayimScan()" style="flex-shrink:0;">Ekle</button>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label>Adet (boş=1)</label><input id="sayimQty" type="number" min="1" placeholder="1"/></div>
-        <div class="form-group"><label>Lokasyon</label><select id="sayimLocSel">${locOpts}</select></div>
+      <div class="form-row" style="margin-bottom:12px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Adet (boş=1)</label>
+          <input id="sayimQty" type="number" min="1" placeholder="1"/>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Lokasyon</label>
+          <select id="sayimLocSel">${locOpts}</select>
+        </div>
       </div>
-      <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="doSayimScan(${id})">✓ Kaydet (Enter)</button>
-      <div id="sayimResult" style="margin-top:14px;"></div>
-      <div style="margin-top:12px;" id="sayimList"></div>`);
+      <div id="sayimResult"></div>
+      <div id="sayimList" style="margin-top:12px;max-height:300px;overflow-y:auto;"></div>`);
 
-    document.getElementById('sayimScan').addEventListener('keydown', e => { if (e.key==='Enter') doSayimScan(id); });
-    document.getElementById('sayimScan').focus();
-    loadSayimList(id);
+    setTimeout(() => {
+      const inp = document.getElementById('sayimScan');
+      if (inp) {
+        inp.focus();
+        inp.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); doSayimScan(); }
+        });
+      }
+    }, 100);
+    loadSayimList();
   };
 
-  window.doSayimScan = async id => {
-    const sn = document.getElementById('sayimScan')?.value.trim();
-    const qty = parseInt(document.getElementById('sayimQty')?.value)||1;
-    const location_id = document.getElementById('sayimLocSel')?.value||null;
-    if (!sn) { toast('Değer girin','error'); return; }
+  window.doSayimScan = async () => {
+    const id = window._sayimId;
+    if (!id) return;
+    const inp = document.getElementById('sayimScan');
+    const sn = inp?.value.trim();
+    const qty = parseInt(document.getElementById('sayimQty')?.value) || 1;
+    const locSel = document.getElementById('sayimLocSel');
+    const location_id = locSel?.value ? parseInt(locSel.value) : null;
+    if (!sn) { inp?.focus(); return; }
+
+    const resultEl = document.getElementById('sayimResult');
+    if (resultEl) resultEl.innerHTML = '<div style="color:var(--muted);font-size:12px;">Kaydediliyor...</div>';
+
     try {
-      const r = await api('POST',`/counting/${id}/scan`,{serial_no:sn,qty,location_id:location_id?parseInt(location_id):null});
+      const r = await api('POST', `/counting/${id}/scan`, { serial_no: sn, qty, location_id });
       const diff = r.difference;
-      document.getElementById('sayimResult').innerHTML = `
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;">
-          <div style="font-weight:600;">${r.product?.sku} — ${r.product?.name}</div>
-          <div style="display:flex;gap:16px;margin-top:6px;font-size:13px;">
+      const diffClass = diff > 0 ? 'diff-pos' : diff < 0 ? 'diff-neg' : 'diff-zero';
+      const diffStr = diff > 0 ? '+' + diff : String(diff);
+      if (resultEl) resultEl.innerHTML = `
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:4px;">
+          <div style="font-weight:600;font-size:14px;">✓ ${r.product?.sku} — ${r.product?.name}</div>
+          <div style="display:flex;gap:20px;margin-top:6px;font-size:13px;">
             <span>Sayılan: <strong>${r.counted_qty}</strong></span>
             <span>Sistem: <strong>${r.system_qty}</strong></span>
-            <span>Fark: <strong class="${diff>0?'diff-pos':diff<0?'diff-neg':'diff-zero'}">${diff>0?'+':''}${diff}</strong></span>
+            <span>Fark: <strong class="${diffClass}">${diffStr}</strong></span>
           </div>
         </div>`;
-      const el = document.getElementById('sayimScan');
-      if (el) { el.value=''; el.focus(); }
-      document.getElementById('sayimQty').value='';
-      loadSayimList(id);
+      // Input temizle ve focus ver
+      if (inp) { inp.value = ''; inp.focus(); }
+      const qtyEl = document.getElementById('sayimQty');
+      if (qtyEl) qtyEl.value = '';
+      loadSayimList();
     } catch(e) {
-      document.getElementById('sayimResult').innerHTML = `<div style="color:var(--red);padding:8px;background:#fef2f2;border-radius:6px;">⚠️ ${e.message}</div>`;
-      const el = document.getElementById('sayimScan');
-      if (el) { el.value=''; el.focus(); }
+      if (resultEl) resultEl.innerHTML = `<div style="color:var(--red);padding:10px;background:#fef2f2;border-radius:8px;font-size:13px;">⚠️ ${e.message}</div>`;
+      if (inp) { inp.value = ''; inp.focus(); }
     }
   };
 
-  async function loadSayimList(id) {
+  window.loadSayimList = async () => {
+    const id = window._sayimId;
+    if (!id) return;
     try {
-      const s = await api('GET',`/counting/${id}`);
+      const s = await api('GET', `/counting/${id}`);
       const el = document.getElementById('sayimList');
-      if (!el || !s.items.length) return;
-      el.innerHTML = `<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;">Son Sayılanlar</div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>SKU</th><th>Ürün</th><th>Sayılan</th><th>Sistem</th><th>Fark</th></tr></thead>
-          <tbody>${s.items.slice(0,10).map(i=>`<tr>
-            <td>${i.sku}</td><td>${i.product_name}</td>
-            <td>${i.counted_qty}</td><td>${i.system_qty}</td>
-            <td class="${i.difference>0?'diff-pos':i.difference<0?'diff-neg':'diff-zero'}">${i.difference>0?'+':''}${i.difference}</td>
+      if (!el) return;
+      if (!s.items.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px;">Henüz kayıt yok</div>'; return; }
+      el.innerHTML = `
+        <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;margin-bottom:6px;">SON SAYILANLAR (${s.items.length})</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:#f8fafc;">
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border);">SKU</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border);">Ürün</th>
+            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border);">Sayılan</th>
+            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border);">Sistem</th>
+            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border);">Fark</th>
+          </tr></thead>
+          <tbody>${s.items.slice(0,15).map(i=>`<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:6px 8px;">${i.sku}</td>
+            <td style="padding:6px 8px;">${i.product_name}</td>
+            <td style="padding:6px 8px;text-align:center;"><strong>${i.counted_qty}</strong></td>
+            <td style="padding:6px 8px;text-align:center;">${i.system_qty}</td>
+            <td style="padding:6px 8px;text-align:center;" class="${i.difference>0?'diff-pos':i.difference<0?'diff-neg':'diff-zero'}">${i.difference>0?'+':''}${i.difference}</td>
           </tr>`).join('')}</tbody>
-        </table></div>`;
+        </table>`;
     } catch {}
-  }
+  };
 
   window.sayimDetay = async id => {
     const s = await api('GET',`/counting/${id}`);
