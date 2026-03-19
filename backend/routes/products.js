@@ -61,40 +61,70 @@ router.post('/import/excel', auth(['admin', 'depo']), upload.single('file'), (re
   const fileData = req.file?.buffer;
   if (!fileData) return res.status(400).json({ error: 'Dosya gerekli' });
   try {
-    // raw:false → tüm değerleri string olarak oku (barkod .0 sorununu önler)
     const wb = XLSX.read(fileData, { type: 'buffer' });
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' });
-    let ok = 0, skip = 0, err = 0;
-    const insert = db.prepare(`INSERT OR IGNORE INTO products
-      (sku, barcode, name, category, width, height, depth, weight, desi, unit, min_stock)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    const update = db.prepare(`UPDATE products SET
-      barcode=?, name=?, category=?, width=?, height=?, depth=?, weight=?, desi=?, unit=?, min_stock=?, updated_at=datetime('now')
-      WHERE sku=?`);
-    const tx = db.transaction(() => {
-      for (const r of rows) {
-        if (!r.sku || !r.name) { err++; continue; }
-        try {
-          // Barkod: integer gibi görünen string'lerdeki .0 temizle
-          let barcode = r.barcode ? String(r.barcode).replace(/\.0$/, '').trim() : null;
-          if (!barcode) barcode = null;
-          const w = parseFloat(r.width)||null;
-          const h = parseFloat(r.height)||null;
-          const d = parseFloat(r.depth)||null;
-          const desi = (w && h && d) ? (w * h * d) / 3000 : null;
-          const existing = db.prepare('SELECT id FROM products WHERE sku=?').get(r.sku);
-          if (existing) {
-            update.run(barcode, r.name, r.category||null, w, h, d, parseFloat(r.weight)||null, desi, r.unit||'ADET', parseInt(r.min_stock)||0, r.sku);
-            skip++;
-          } else {
-            insert.run(r.sku, barcode, r.name, r.category||null, w, h, d, parseFloat(r.weight)||null, desi, r.unit||'ADET', parseInt(r.min_stock)||0);
-            ok++;
-          }
-        } catch(e) { console.error('Row error:', e.message); err++; }
+    const results = { ok: 0, updated: 0, errors: [] };
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNum = i + 2; // Excel satır no (1=başlık)
+
+      // Zorunlu alan kontrolü
+      if (!r.sku || !r.name) {
+        results.errors.push(`Satır ${rowNum}: SKU veya isim boş`);
+        continue;
       }
+
+      // Barkod temizle (.0 sonu)
+      let barcode = r.barcode ? String(r.barcode).replace(/\.0$/, '').trim() : null;
+      if (!barcode) barcode = null;
+
+      const w = parseFloat(r.width)||null;
+      const h = parseFloat(r.height)||null;
+      const d = parseFloat(r.depth)||null;
+      const desi = (w && h && d) ? Math.round((w * h * d) / 3000 * 100) / 100 : null;
+
+      // SKU çakışma kontrolü
+      const existingSku = db.prepare('SELECT id, name FROM products WHERE sku=? AND active=1').get(r.sku);
+
+      // Barkod çakışma kontrolü (başka ürün için)
+      if (barcode) {
+        const existingBarcode = db.prepare('SELECT sku FROM products WHERE barcode=? AND sku!=? AND active=1').get(barcode, r.sku);
+        if (existingBarcode) {
+          results.errors.push(`Satır ${rowNum} (${r.sku}): Barkod ${barcode} zaten "${existingBarcode.sku}" ürününe ait`);
+          continue;
+        }
+      }
+
+      try {
+        if (existingSku) {
+          // Güncelle
+          db.prepare(`UPDATE products SET barcode=?, name=?, category=?, width=?, height=?, depth=?,
+            weight=?, desi=?, unit=?, min_stock=?, updated_at=datetime('now') WHERE sku=?`)
+            .run(barcode, r.name, r.category||null, w, h, d, parseFloat(r.weight)||null, desi, r.unit||'ADET', parseInt(r.min_stock)||0, r.sku);
+          results.updated++;
+        } else {
+          // Yeni ekle
+          db.prepare(`INSERT INTO products (sku, barcode, name, category, width, height, depth, weight, desi, unit, min_stock)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(r.sku, barcode, r.name, r.category||null, w, h, d, parseFloat(r.weight)||null, desi, r.unit||'ADET', parseInt(r.min_stock)||0);
+          results.ok++;
+        }
+      } catch(e) {
+        results.errors.push(`Satır ${rowNum} (${r.sku}): ${e.message}`);
+      }
+    }
+
+    let msg = `${results.ok} yeni ürün eklendi`;
+    if (results.updated) msg += `, ${results.updated} güncellendi`;
+    if (results.errors.length) msg += `, ${results.errors.length} hata`;
+
+    res.json({
+      message: msg,
+      ok: results.ok,
+      updated: results.updated,
+      errors: results.errors
     });
-    tx();
-    res.json({ message: `${ok} yeni ürün eklendi, ${skip} güncellendi${err ? ', '+err+' satır atlandı' : ''}` });
   } catch(e) {
     res.status(500).json({ error: 'Dosya okunamadı: ' + e.message });
   }
