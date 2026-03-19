@@ -27,22 +27,26 @@ router.post('/:id/scan', auth(['admin', 'depo', 'sayim']), (req, res) => {
     const session = db.prepare("SELECT * FROM count_sessions WHERE id=? AND status='acik'").get(req.params.id);
     if (!session) return res.status(400).json({ error: 'Aktif sayım oturumu bulunamadı' });
 
-    let pid = product_id || null;
+    let pid = product_id ? parseInt(product_id) : null;
     let sn = serial_no ? String(serial_no).trim() : null;
-    if (!sn) return res.status(400).json({ error: 'Seri no / SKU / EAN gerekli' });
 
-    // Önce seri no olarak bak
-    if (!pid) {
+    // product_id direkt verilmişse ürün kontrolü yap
+    if (pid) {
+      const prod = db.prepare('SELECT id FROM products WHERE id=? AND active=1').get(pid);
+      if (!prod) return res.status(404).json({ error: 'Ürün bulunamadı' });
+    }
+
+    // serial_no verilmişse ürünü bul
+    if (!pid && sn) {
       const serial = db.prepare('SELECT product_id FROM serials WHERE serial_no=?').get(sn);
       if (serial) pid = serial.product_id;
     }
-    // Sonra SKU veya EAN olarak bak
-    if (!pid) {
+    if (!pid && sn) {
       const prod = db.prepare('SELECT id FROM products WHERE sku=? OR barcode=?').get(sn, sn);
       if (prod) { pid = prod.id; sn = null; }
     }
 
-    if (!pid) return res.status(404).json({ error: `"${sn}" — ürün bulunamadı. SKU, seri no veya EAN kontrol edin.` });
+    if (!pid) return res.status(404).json({ error: sn ? `"${sn}" — ürün bulunamadı` : 'Ürün veya seri no gerekli' });
 
     const systemQty = db.prepare("SELECT COUNT(*) as cnt FROM serials WHERE product_id=? AND status IN ('mk','stok')").get(pid).cnt;
     const counted = qty ? parseInt(qty) : 1;
