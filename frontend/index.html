@@ -757,7 +757,9 @@ async function renderSayim() {
           <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;">ÜRÜN *</label>
           <input id="lokProdInput" placeholder="SKU veya ürün adı yazın..." autocomplete="off"
             style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;"
-            oninput="prodAutocomplete()" onblur="setTimeout(()=>hideDropdown('lokProdDropdown'),200)"/>
+            oninput="prodAutocomplete()"
+            onfocus="prodAutocompleteAll()"
+            onblur="setTimeout(()=>hideDropdown('lokProdDropdown'),200)"/>
           <input type="hidden" id="lokProdId"/>
           <div id="lokProdDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:7px;z-index:50;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
         </div>
@@ -859,29 +861,56 @@ async function renderSayim() {
   };
   window.hideDropdown = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
 
-  // Ürün autocomplete
+
+  // Ürün autocomplete — event delegation ile (string escape sorunu yok)
+  function _renderProdDD(matches) {
+    const dd = document.getElementById('lokProdDropdown');
+    if (!dd) return;
+    if (!matches.length) { dd.style.display='none'; return; }
+    dd.innerHTML = matches.map(p =>
+      `<div data-pid="${p.id}" style="padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);">
+        <strong>${p.sku}</strong> — ${p.name}
+        ${p.category?`<span style="font-size:11px;color:var(--muted);margin-left:6px;">${p.category}</span>`:''}
+      </div>`
+    ).join('');
+    dd.onclick = (e) => {
+      const row = e.target.closest('[data-pid]');
+      if (!row) return;
+      const pid = parseInt(row.dataset.pid);
+      const prod = window._sayimProds.find(p => p.id === pid);
+      if (!prod) return;
+      document.getElementById('lokProdId').value = prod.id;
+      document.getElementById('lokProdInput').value = prod.sku + ' — ' + prod.name;
+      dd.style.display = 'none';
+      setTimeout(() => document.getElementById('lokQty')?.focus(), 50);
+    };
+    dd.style.display = 'block';
+  }
   window.prodAutocomplete = () => {
     const val = document.getElementById('lokProdInput')?.value.trim().toLowerCase();
-    const dd = document.getElementById('lokProdDropdown');
     document.getElementById('lokProdId').value = '';
-    if (!val || val.length < 2) { dd.style.display = 'none'; return; }
+    if (!val) { _renderProdDD(window._sayimProds.slice(0,8)); return; }
+    if (val.length < 2) { hideDropdown('lokProdDropdown'); return; }
     const matches = window._sayimProds.filter(p =>
-      p.sku.toLowerCase().includes(val) || p.name.toLowerCase().includes(val)
-    ).slice(0, 10);
-    if (!matches.length) { dd.style.display = 'none'; return; }
-    dd.innerHTML = matches.map(p =>
-      `<div onclick="selectProd(${p.id},'${p.sku}')"
-        style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);"
-        onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background=''"
-      ><strong>${p.sku}</strong> — ${p.name}</div>`
-    ).join('');
-    dd.style.display = 'block';
+      p.sku.toLowerCase().includes(val) ||
+      p.name.toLowerCase().includes(val) ||
+      (p.barcode||'').includes(val)
+    ).slice(0,10);
+    _renderProdDD(matches);
   };
-  window.selectProd = (id, sku) => {
-    document.getElementById('lokProdId').value = id;
-    document.getElementById('lokProdInput').value = sku;
-    document.getElementById('lokProdDropdown').style.display = 'none';
-    document.getElementById('lokQty')?.focus();
+  window.prodAutocompleteAll = () => {
+    const val = document.getElementById('lokProdInput')?.value.trim();
+    if (val && val.length >= 2) window.prodAutocomplete();
+    else _renderProdDD(window._sayimProds.slice(0,8));
+  };
+  window.selectProd = (id) => {
+    const prod = window._sayimProds.find(p => p.id === id);
+    if (!prod) return;
+    document.getElementById('lokProdId').value = prod.id;
+    document.getElementById('lokProdInput').value = prod.sku + ' — ' + prod.name;
+    hideDropdown('lokProdDropdown');
+    setTimeout(() => document.getElementById('lokQty')?.focus(), 50);
+  };
   };
 
   // Tekil sayım (seri/EAN)
