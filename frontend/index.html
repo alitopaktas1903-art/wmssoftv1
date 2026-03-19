@@ -696,77 +696,211 @@ async function renderSayim() {
     try { await api('PUT',`/counting/${id}/close`); toast('Kapatıldı','success'); renderSayim(); } catch(e) { toast(e.message,'error'); }
   };
 
-  // Sayım terminal — global state
+  // ── SAYIM TERMİNAL — GLOBAL STATE ────────────────────────
   window._sayimId = null;
+  window._sayimLocs = [];
+  window._sayimProds = [];
 
   window.openSayimTerminal = async (id, name) => {
     window._sayimId = id;
-    let locs = [];
-    try { locs = await api('GET','/stock/locations'); } catch {}
-    const locOpts = `<option value="">-- Lokasyon (opsiyonel) --</option>${locs.map(l=>`<option value="${l.id}">${l.code} — ${l.name}</option>`).join('')}`;
+    try { window._sayimLocs = await api('GET','/stock/locations'); } catch { window._sayimLocs = []; }
+    try { window._sayimProds = await api('GET','/products'); } catch { window._sayimProds = []; }
+
     showModal(`
       <div class="modal-title">📱 ${name} <button class="modal-close" onclick="closeModal()">×</button></div>
-      <div class="info-box">Seri no, SKU veya EAN okutun. Her okutmada 1 adet eklenir.</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <input class="scan-input" id="sayimScan" placeholder="Okutun veya girin..." style="flex:1;font-size:16px;"/>
-        <button class="btn btn-primary" onclick="doSayimScan()" style="flex-shrink:0;">Ekle</button>
+
+      <!-- MOD SEÇİMİ -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+        <button id="modSeri" onclick="sayimMod('seri')"
+          style="padding:12px;border:2px solid var(--accent);border-radius:10px;background:rgba(59,130,246,0.08);font-weight:600;font-size:13px;cursor:pointer;color:var(--accent);">
+          🔍 Tekil Sayım<br/><span style="font-size:11px;font-weight:400;">Seri / EAN okut</span>
+        </button>
+        <button id="modLok" onclick="sayimMod('lokasyon')"
+          style="padding:12px;border:2px solid var(--border);border-radius:10px;background:transparent;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted);">
+          📍 Lokasyon Sayım<br/><span style="font-size:11px;font-weight:400;">Ürün + adet gir</span>
+        </button>
       </div>
-      <div class="form-row" style="margin-bottom:12px;">
-        <div class="form-group" style="margin-bottom:0;">
-          <label>Adet (boş=1)</label>
-          <input id="sayimQty" type="number" min="1" placeholder="1"/>
+
+      <!-- TEKİL SAYIM -->
+      <div id="panelSeri">
+        <div class="info-box" style="margin-bottom:10px;">Barkod okutun — her okutma 1 adet sayılır, adet girişi gerekmez.</div>
+        <div style="position:relative;margin-bottom:10px;">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;">LOKASYON <span style="color:var(--red)">*</span></label>
+          <input id="seriLocInput" placeholder="Lokasyon kodu yazın (en az 2 harf)..." autocomplete="off"
+            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;"
+            oninput="locAutocomplete('seriLocInput','seriLocDropdown','seriLocId')"
+            onfocus="locAutocompleteAll('seriLocInput','seriLocDropdown','seriLocId')"
+            onblur="setTimeout(()=>hideDropdown('seriLocDropdown'),200)"/>
+          <input type="hidden" id="seriLocId"/>
+          <div id="seriLocDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:7px;z-index:50;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
         </div>
-        <div class="form-group" style="margin-bottom:0;">
-          <label>Lokasyon</label>
-          <select id="sayimLocSel">${locOpts}</select>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <input class="scan-input" id="sayimScan" placeholder="Seri no / EAN okutun..." style="flex:1;font-size:16px;"/>
+          <button class="btn btn-primary" onclick="doTikilSayim()" style="flex-shrink:0;">Ekle</button>
         </div>
       </div>
-      <div id="sayimResult"></div>
-      <div id="sayimList" style="margin-top:12px;max-height:300px;overflow-y:auto;"></div>`);
+
+      <!-- LOKASYON SAYIM -->
+      <div id="panelLokasyon" style="display:none;">
+        <div class="info-box" style="margin-bottom:10px;">Lokasyon seçin, ürün seçin, adet girin.</div>
+        <div style="position:relative;margin-bottom:10px;">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;">LOKASYON <span style="color:var(--red)">*</span></label>
+          <input id="lokLocInput" placeholder="Lokasyon kodu yazın (en az 2 harf)..." autocomplete="off"
+            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;"
+            oninput="locAutocomplete('lokLocInput','lokLocDropdown','lokLocId')"
+            onfocus="locAutocompleteAll('lokLocInput','lokLocDropdown','lokLocId')"
+            onblur="setTimeout(()=>hideDropdown('lokLocDropdown'),200)"/>
+          <input type="hidden" id="lokLocId"/>
+          <div id="lokLocDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:7px;z-index:50;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+        </div>
+        <div style="position:relative;margin-bottom:10px;">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;">ÜRÜN *</label>
+          <input id="lokProdInput" placeholder="SKU veya ürün adı yazın..." autocomplete="off"
+            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;"
+            oninput="prodAutocomplete()" onblur="setTimeout(()=>hideDropdown('lokProdDropdown'),200)"/>
+          <input type="hidden" id="lokProdId"/>
+          <div id="lokProdDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:7px;z-index:50;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <div style="flex:1;">
+            <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;">ADET *</label>
+            <input id="lokQty" type="number" min="1" placeholder="1" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:16px;"/>
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button class="btn btn-primary" onclick="doLokasyonSayim()">Ekle</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="sayimResult" style="margin-bottom:8px;"></div>
+      <div id="sayimList" style="max-height:280px;overflow-y:auto;"></div>`);
 
     setTimeout(() => {
-      const inp = document.getElementById('sayimScan');
-      if (inp) {
-        inp.focus();
-        inp.addEventListener('keydown', e => {
-          if (e.key === 'Enter') { e.preventDefault(); doSayimScan(); }
+      // Tek lokasyon varsa otomatik seç
+      const aktivLocs = window._sayimLocs.filter(l => l.active !== 0);
+      if (aktivLocs.length === 1) {
+        const l = aktivLocs[0];
+        const label = `${l.code} — ${l.name||''}`;
+        ['seriLocInput','lokLocInput'].forEach(id => {
+          const el = document.getElementById(id); if (el) el.value = label;
+        });
+        ['seriLocId','lokLocId'].forEach(id => {
+          const el = document.getElementById(id); if (el) el.value = l.id;
         });
       }
-    }, 100);
+      document.getElementById('seriLocInput')?.focus();
+      document.getElementById('sayimScan')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); doTikilSayim(); }
+      });
+      document.getElementById('lokQty')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); doLokasyonSayim(); }
+      });
+    }, 150);
     loadSayimList();
   };
 
-  window.doSayimScan = async () => {
-    const id = window._sayimId;
-    if (!id) return;
+  // Mod değiştir
+  window.sayimMod = (mod) => {
+    const isSeri = mod === 'seri';
+    document.getElementById('panelSeri').style.display = isSeri ? 'block' : 'none';
+    document.getElementById('panelLokasyon').style.display = isSeri ? 'none' : 'block';
+    document.getElementById('modSeri').style.borderColor = isSeri ? 'var(--accent)' : 'var(--border)';
+    document.getElementById('modSeri').style.color = isSeri ? 'var(--accent)' : 'var(--muted)';
+    document.getElementById('modSeri').style.background = isSeri ? 'rgba(59,130,246,0.08)' : 'transparent';
+    document.getElementById('modLok').style.borderColor = !isSeri ? 'var(--accent)' : 'var(--border)';
+    document.getElementById('modLok').style.color = !isSeri ? 'var(--accent)' : 'var(--muted)';
+    document.getElementById('modLok').style.background = !isSeri ? 'rgba(59,130,246,0.08)' : 'transparent';
+    setTimeout(() => {
+      if (isSeri) document.getElementById('sayimScan')?.focus();
+      else document.getElementById('lokLocInput')?.focus();
+    }, 50);
+  };
+
+  // Lokasyon autocomplete
+  function renderLocDropdown(inputId, dropdownId, hiddenId, matches) {
+    const dd = document.getElementById(dropdownId);
+    if (!matches.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = matches.map(l =>
+      `<div onclick="selectLoc('${inputId}','${dropdownId}','${hiddenId}',${l.id},'${l.code} — ${l.name||''}')"
+        style="padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;"
+        onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background=''">
+        <span><strong>${l.code}</strong> — ${l.name||''}</span>
+        <span style="font-size:11px;color:var(--muted);background:#f1f5f9;padding:2px 6px;border-radius:4px;">${l.type}</span>
+      </div>`
+    ).join('');
+    dd.style.display = 'block';
+  }
+  window.locAutocomplete = (inputId, dropdownId, hiddenId) => {
+    const val = document.getElementById(inputId)?.value.trim().toLowerCase();
+    document.getElementById(hiddenId).value = '';
+    if (!val) { renderLocDropdown(inputId, dropdownId, hiddenId, window._sayimLocs.slice(0,8)); return; }
+    if (val.length < 2) { document.getElementById(dropdownId).style.display = 'none'; return; }
+    const matches = window._sayimLocs.filter(l =>
+      l.code.toLowerCase().includes(val) || (l.name||'').toLowerCase().includes(val)
+    ).slice(0, 10);
+    renderLocDropdown(inputId, dropdownId, hiddenId, matches);
+  };
+  // Tüm listeyi göster (focus anında)
+  window.locAutocompleteAll = (inputId, dropdownId, hiddenId) => {
+    const val = document.getElementById(inputId)?.value.trim().toLowerCase();
+    if (val && val.length >= 2) {
+      window.locAutocomplete(inputId, dropdownId, hiddenId);
+    } else {
+      renderLocDropdown(inputId, dropdownId, hiddenId, window._sayimLocs.slice(0,8));
+    }
+  };
+  window.selectLoc = (inputId, dropdownId, hiddenId, id, label) => {
+    document.getElementById(inputId).value = label;
+    document.getElementById(hiddenId).value = id;
+    document.getElementById(dropdownId).style.display = 'none';
+    // Seri modda scan input'a geç, lokasyon modda ürün input'a geç
+    if (inputId === 'seriLocInput') setTimeout(() => document.getElementById('sayimScan')?.focus(), 50);
+    if (inputId === 'lokLocInput') setTimeout(() => document.getElementById('lokProdInput')?.focus(), 50);
+  };
+  window.hideDropdown = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
+
+  // Ürün autocomplete
+  window.prodAutocomplete = () => {
+    const val = document.getElementById('lokProdInput')?.value.trim().toLowerCase();
+    const dd = document.getElementById('lokProdDropdown');
+    document.getElementById('lokProdId').value = '';
+    if (!val || val.length < 2) { dd.style.display = 'none'; return; }
+    const matches = window._sayimProds.filter(p =>
+      p.sku.toLowerCase().includes(val) || p.name.toLowerCase().includes(val)
+    ).slice(0, 10);
+    if (!matches.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = matches.map(p =>
+      `<div onclick="selectProd(${p.id},'${p.sku}')"
+        style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);"
+        onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background=''"
+      ><strong>${p.sku}</strong> — ${p.name}</div>`
+    ).join('');
+    dd.style.display = 'block';
+  };
+  window.selectProd = (id, sku) => {
+    document.getElementById('lokProdId').value = id;
+    document.getElementById('lokProdInput').value = sku;
+    document.getElementById('lokProdDropdown').style.display = 'none';
+    document.getElementById('lokQty')?.focus();
+  };
+
+  // Tekil sayım (seri/EAN)
+  window.doTikilSayim = async () => {
+    const id = window._sayimId; if (!id) return;
     const inp = document.getElementById('sayimScan');
     const sn = inp?.value.trim();
-    const qty = parseInt(document.getElementById('sayimQty')?.value) || 1;
-    const locSel = document.getElementById('sayimLocSel');
-    const location_id = locSel?.value ? parseInt(locSel.value) : null;
+    const locId = document.getElementById('seriLocId')?.value || null;
+    if (!locId) { toast('Lokasyon seçin','error'); document.getElementById('seriLocInput')?.focus(); return; }
     if (!sn) { inp?.focus(); return; }
-
     const resultEl = document.getElementById('sayimResult');
     if (resultEl) resultEl.innerHTML = '<div style="color:var(--muted);font-size:12px;">Kaydediliyor...</div>';
-
     try {
-      const r = await api('POST', `/counting/${id}/scan`, { serial_no: sn, qty, location_id });
-      const diff = r.difference;
-      const diffClass = diff > 0 ? 'diff-pos' : diff < 0 ? 'diff-neg' : 'diff-zero';
-      const diffStr = diff > 0 ? '+' + diff : String(diff);
-      if (resultEl) resultEl.innerHTML = `
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:4px;">
-          <div style="font-weight:600;font-size:14px;">✓ ${r.product?.sku} — ${r.product?.name}</div>
-          <div style="display:flex;gap:20px;margin-top:6px;font-size:13px;">
-            <span>Sayılan: <strong>${r.counted_qty}</strong></span>
-            <span>Sistem: <strong>${r.system_qty}</strong></span>
-            <span>Fark: <strong class="${diffClass}">${diffStr}</strong></span>
-          </div>
-        </div>`;
-      // Input temizle ve focus ver
+      const r = await api('POST', `/counting/${id}/scan`, {
+        serial_no: sn, qty: 1,
+        location_id: locId ? parseInt(locId) : null
+      });
+      showSayimResult(r);
       if (inp) { inp.value = ''; inp.focus(); }
-      const qtyEl = document.getElementById('sayimQty');
-      if (qtyEl) qtyEl.value = '';
       loadSayimList();
     } catch(e) {
       if (resultEl) resultEl.innerHTML = `<div style="color:var(--red);padding:10px;background:#fef2f2;border-radius:8px;font-size:13px;">⚠️ ${e.message}</div>`;
@@ -774,27 +908,68 @@ async function renderSayim() {
     }
   };
 
+  // Lokasyon sayım (ürün + adet)
+  window.doLokasyonSayim = async () => {
+    const id = window._sayimId; if (!id) return;
+    const prodId = document.getElementById('lokProdId')?.value;
+    const locId = document.getElementById('lokLocId')?.value || null;
+    const qty = parseInt(document.getElementById('lokQty')?.value) || 1;
+    if (!locId) { toast('Lokasyon seçin','error'); document.getElementById('lokLocInput')?.focus(); return; }
+    if (!prodId) { toast('Ürün seçin','error'); document.getElementById('lokProdInput')?.focus(); return; }
+    const resultEl = document.getElementById('sayimResult');
+    if (resultEl) resultEl.innerHTML = '<div style="color:var(--muted);font-size:12px;">Kaydediliyor...</div>';
+    try {
+      const r = await api('POST', `/counting/${id}/scan`, {
+        product_id: parseInt(prodId), qty,
+        location_id: locId ? parseInt(locId) : null
+      });
+      showSayimResult(r);
+      document.getElementById('lokQty').value = '';
+      document.getElementById('lokQty')?.focus();
+      loadSayimList();
+    } catch(e) {
+      if (resultEl) resultEl.innerHTML = `<div style="color:var(--red);padding:10px;background:#fef2f2;border-radius:8px;font-size:13px;">⚠️ ${e.message}</div>`;
+    }
+  };
+
+  function showSayimResult(r) {
+    const diff = r.difference;
+    const dc = diff > 0 ? 'diff-pos' : diff < 0 ? 'diff-neg' : 'diff-zero';
+    const ds = diff > 0 ? '+' + diff : String(diff);
+    const el = document.getElementById('sayimResult');
+    if (el) el.innerHTML = `
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
+        <div style="font-weight:600;font-size:14px;">✓ ${r.product?.sku} — ${r.product?.name}</div>
+        <div style="display:flex;gap:20px;margin-top:5px;font-size:13px;">
+          <span>Sayılan: <strong>${r.counted_qty}</strong></span>
+          <span>Sistem: <strong>${r.system_qty}</strong></span>
+          <span>Fark: <strong class="${dc}">${ds}</strong></span>
+        </div>
+      </div>`;
+  }
+
   window.loadSayimList = async () => {
-    const id = window._sayimId;
-    if (!id) return;
+    const id = window._sayimId; if (!id) return;
     try {
       const s = await api('GET', `/counting/${id}`);
       const el = document.getElementById('sayimList');
       if (!el) return;
       if (!s.items.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px;">Henüz kayıt yok</div>'; return; }
       el.innerHTML = `
-        <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;margin-bottom:6px;">SON SAYILANLAR (${s.items.length})</div>
+        <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;margin-bottom:6px;">SAYIM LİSTESİ (${s.items.length})</div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead><tr style="background:#f8fafc;">
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border);">SKU</th>
             <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border);">Ürün</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border);">Lokasyon</th>
             <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border);">Sayılan</th>
             <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border);">Sistem</th>
             <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border);">Fark</th>
           </tr></thead>
-          <tbody>${s.items.slice(0,15).map(i=>`<tr style="border-bottom:1px solid var(--border);">
+          <tbody>${s.items.map(i=>`<tr style="border-bottom:1px solid var(--border);">
             <td style="padding:6px 8px;">${i.sku}</td>
             <td style="padding:6px 8px;">${i.product_name}</td>
+            <td style="padding:6px 8px;">${i.location_code||'-'}</td>
             <td style="padding:6px 8px;text-align:center;"><strong>${i.counted_qty}</strong></td>
             <td style="padding:6px 8px;text-align:center;">${i.system_qty}</td>
             <td style="padding:6px 8px;text-align:center;" class="${i.difference>0?'diff-pos':i.difference<0?'diff-neg':'diff-zero'}">${i.difference>0?'+':''}${i.difference}</td>
