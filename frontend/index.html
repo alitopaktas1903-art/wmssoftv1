@@ -805,7 +805,7 @@ async function renderUrunler() {
     try {
       const rows = await api('GET',`/products?q=${encodeURIComponent(q)}`);
       document.getElementById('upTable').innerHTML = `<div class="table-wrap"><table>
-        <thead><tr><th>SKU</th><th>Barkod</th><th>İsim</th><th>Kategori</th><th>Boyut (cm)</th><th>Desi</th><th>S.Takip</th><th></th></tr></thead>
+        <thead><tr><th>SKU</th><th>EAN</th><th>İsim</th><th>Kategori</th><th>Boyut (cm)</th><th>Desi</th><th>S.Takip</th><th></th></tr></thead>
         <tbody>${rows.map(p=>`<tr>
           <td><strong>${p.sku}</strong></td><td>${p.barcode||'-'}</td><td>${p.name}</td>
           <td>${p.category||'-'}</td>
@@ -900,7 +900,7 @@ async function renderUrunler() {
       <div class="modal-title">${p?'Ürün Düzenle':'Yeni Ürün'} <button class="modal-close" onclick="closeModal()">×</button></div>
       <div class="form-row">
         <div class="form-group"><label>SKU *</label><input id="fSku" value="${p?.sku||''}" ${p?'readonly':''}></div>
-        <div class="form-group"><label>Barkod</label><input id="fBarcode" value="${p?.barcode||''}"></div>
+        <div class="form-group"><label>EAN Kodu (opsiyonel)</label><input id="fEan" value="${p?.ean||p?.barcode||''}"></div>
       </div>
       <div class="form-group"><label>İsim *</label><input id="fName" value="${p?.name||''}"></div>
       <div class="form-row">
@@ -949,7 +949,7 @@ async function renderUrunler() {
   window.saveUrun = async id => {
     const body = {
       sku: document.getElementById('fSku').value.trim(),
-      barcode: document.getElementById('fBarcode').value.trim()||null,
+      barcode: document.getElementById('fEan').value.trim()||null,
       name: document.getElementById('fName').value.trim(),
       category: document.getElementById('fCat').value||null,
       unit: document.getElementById('fUnit').value,
