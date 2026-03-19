@@ -24,8 +24,9 @@ router.post('/', auth(['admin', 'depo', 'sayim']), (req, res) => {
 router.post('/:id/scan', auth(['admin', 'depo', 'sayim']), (req, res) => {
   try {
     const { serial_no, product_id, location_id, qty } = req.body;
-    const session = db.prepare("SELECT * FROM count_sessions WHERE id=? AND status='acik'").get(req.params.id);
-    if (!session) return res.status(400).json({ error: 'Aktif sayım oturumu bulunamadı' });
+    const session = db.prepare("SELECT * FROM count_sessions WHERE id=?").get(req.params.id);
+    if (!session) return res.status(404).json({ error: 'Sayım oturumu bulunamadı' });
+    if (session.status !== 'acik') return res.status(400).json({ error: `Sayım "${session.status}" durumunda — sadece açık sayımlara kayıt eklenebilir` });
 
     let pid = product_id ? parseInt(product_id) : null;
     let sn = serial_no ? String(serial_no).trim() : null;
@@ -60,7 +61,7 @@ router.post('/:id/scan', auth(['admin', 'depo', 'sayim']), (req, res) => {
     let newCounted;
     if (existing) {
       newCounted = existing.counted_qty + counted;
-      db.prepare('UPDATE count_items SET counted_qty=?, system_qty=?, difference=?, counted_at=datetime("now") WHERE id=?')
+      db.prepare("UPDATE count_items SET counted_qty=?, system_qty=?, difference=?, counted_at=datetime('now') WHERE id=?")
         .run(newCounted, systemQty, newCounted - systemQty, existing.id);
     } else {
       newCounted = counted;
