@@ -27,7 +27,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sku TEXT UNIQUE NOT NULL,
-    barcode TEXT UNIQUE,
+    barcode TEXT,
     name TEXT NOT NULL,
     description TEXT,
     width REAL, height REAL, depth REAL, weight REAL, desi REAL,
@@ -109,6 +109,16 @@ db.exec(`
 
 // Migration — mevcut DB için
 const migrations = [
+  'ALTER TABLE products ADD COLUMN seri_takip INTEGER DEFAULT 1',
+  'ALTER TABLE serials ADD COLUMN quantity INTEGER DEFAULT 1',
+  `CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    active INTEGER DEFAULT 1
+  )`,
+  // EAN unique index'i kaldır (varsa)
+  'DROP INDEX IF EXISTS sqlite_autoindex_products_2',
+
   'ALTER TABLE products ADD COLUMN seri_takip INTEGER DEFAULT 1',
   'ALTER TABLE serials ADD COLUMN quantity INTEGER DEFAULT 1',
   `CREATE TABLE IF NOT EXISTS categories (
