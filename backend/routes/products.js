@@ -87,14 +87,7 @@ router.post('/import/excel', auth(['admin', 'depo']), upload.single('file'), (re
       // SKU çakışma kontrolü
       const existingSku = db.prepare('SELECT id, name FROM products WHERE sku=? AND active=1').get(r.sku);
 
-      // Barkod çakışma kontrolü (başka ürün için)
-      if (barcode) {
-        const existingBarcode = db.prepare('SELECT sku FROM products WHERE barcode=? AND sku!=? AND active=1').get(barcode, r.sku);
-        if (existingBarcode) {
-          results.errors.push(`Satır ${rowNum} (${r.sku}): Barkod ${barcode} zaten "${existingBarcode.sku}" ürününe ait`);
-          continue;
-        }
-      }
+      // EAN kodu — unique değil, aynı EAN birden fazla üründe olabilir
 
       try {
         if (existingSku) {
@@ -154,7 +147,7 @@ router.post('/', auth(['admin', 'depo']), (req, res) => {
       category||null, unit||'ADET', min_stock||0, seri_takip!==undefined?seri_takip:1);
     res.json({ id: result.lastInsertRowid, message: 'Ürün oluşturuldu' });
   } catch(e) {
-    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: 'SKU veya barkod zaten var' });
+    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: 'Bu SKU zaten var' });
     res.status(500).json({ error: e.message });
   }
 });
