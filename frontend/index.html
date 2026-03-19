@@ -726,11 +726,15 @@ async function renderSayim() {
         <div class="info-box" style="margin-bottom:10px;">Barkod okutun — her okutma 1 adet sayılır, adet girişi gerekmez.</div>
         <div style="position:relative;margin-bottom:10px;">
           <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;">LOKASYON <span style="color:var(--red)">*</span></label>
-          <input id="seriLocInput" placeholder="Lokasyon kodu yazın (en az 2 harf)..." autocomplete="off"
-            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;"
-            oninput="locAutocomplete('seriLocInput','seriLocDropdown','seriLocId')"
-            onfocus="locAutocompleteAll('seriLocInput','seriLocDropdown','seriLocId')"
-            onblur="setTimeout(()=>hideDropdown('seriLocDropdown'),200)"/>
+          <div style="position:relative;display:flex;gap:4px;">
+            <input id="seriLocInput" placeholder="Lokasyon kodu yazın..." autocomplete="off"
+              style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;"
+              oninput="document.getElementById('seriLocId').value='';locAutocomplete('seriLocInput','seriLocDropdown','seriLocId')"
+              onfocus="locAutocompleteAll('seriLocInput','seriLocDropdown','seriLocId')"
+              onblur="setTimeout(()=>hideDropdown('seriLocDropdown'),200)"/>
+            <button type="button" onclick="clearLocInput('seriLocInput','seriLocId')"
+              style="padding:0 10px;border:1px solid var(--border);border-radius:7px;background:#f8fafc;cursor:pointer;font-size:16px;color:var(--muted);" title="Temizle">×</button>
+          </div>
           <input type="hidden" id="seriLocId"/>
           <div id="seriLocDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:7px;z-index:50;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
         </div>
@@ -745,21 +749,29 @@ async function renderSayim() {
         <div class="info-box" style="margin-bottom:10px;">Lokasyon seçin, ürün seçin, adet girin.</div>
         <div style="position:relative;margin-bottom:10px;">
           <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;">LOKASYON <span style="color:var(--red)">*</span></label>
-          <input id="lokLocInput" placeholder="Lokasyon kodu yazın (en az 2 harf)..." autocomplete="off"
-            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;"
-            oninput="locAutocomplete('lokLocInput','lokLocDropdown','lokLocId')"
-            onfocus="locAutocompleteAll('lokLocInput','lokLocDropdown','lokLocId')"
-            onblur="setTimeout(()=>hideDropdown('lokLocDropdown'),200)"/>
+          <div style="position:relative;display:flex;gap:4px;">
+            <input id="lokLocInput" placeholder="Lokasyon kodu yazın..." autocomplete="off"
+              style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;"
+              oninput="document.getElementById('lokLocId').value='';locAutocomplete('lokLocInput','lokLocDropdown','lokLocId')"
+              onfocus="locAutocompleteAll('lokLocInput','lokLocDropdown','lokLocId')"
+              onblur="setTimeout(()=>hideDropdown('lokLocDropdown'),200)"/>
+            <button type="button" onclick="clearLocInput('lokLocInput','lokLocId')"
+              style="padding:0 10px;border:1px solid var(--border);border-radius:7px;background:#f8fafc;cursor:pointer;font-size:16px;color:var(--muted);" title="Temizle">×</button>
+          </div>
           <input type="hidden" id="lokLocId"/>
           <div id="lokLocDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:7px;z-index:50;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
         </div>
         <div style="position:relative;margin-bottom:10px;">
           <label style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;">ÜRÜN *</label>
-          <input id="lokProdInput" placeholder="SKU veya ürün adı yazın..." autocomplete="off"
-            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;"
-            oninput="prodAutocomplete()"
-            onfocus="prodAutocompleteAll()"
-            onblur="setTimeout(()=>hideDropdown('lokProdDropdown'),200)"/>
+          <div style="position:relative;display:flex;gap:4px;">
+            <input id="lokProdInput" placeholder="SKU veya ürün adı yazın..." autocomplete="off"
+              style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:14px;"
+              oninput="document.getElementById('lokProdId').value='';prodAutocomplete()"
+              onfocus="prodAutocompleteAll()"
+              onblur="setTimeout(()=>hideDropdown('lokProdDropdown'),200)"/>
+            <button type="button" onclick="document.getElementById('lokProdId').value='';document.getElementById('lokProdInput').value='';document.getElementById('lokProdInput').focus();"
+              style="padding:0 10px;border:1px solid var(--border);border-radius:7px;background:#f8fafc;cursor:pointer;font-size:16px;color:var(--muted);" title="Temizle">×</button>
+          </div>
           <input type="hidden" id="lokProdId"/>
           <div id="lokProdDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:7px;z-index:50;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
         </div>
@@ -842,22 +854,45 @@ async function renderSayim() {
     ).slice(0, 10);
     renderLocDropdown(inputId, dropdownId, hiddenId, matches);
   };
-  // Tüm listeyi göster (focus anında)
+  // Tüm listeyi göster (focus anında — seçilmiş olsa bile)
   window.locAutocompleteAll = (inputId, dropdownId, hiddenId) => {
     const val = document.getElementById(inputId)?.value.trim().toLowerCase();
-    if (val && val.length >= 2) {
+    const hiddenVal = document.getElementById(hiddenId)?.value;
+    // Seçili lokasyon varsa bile tüm listeyi göster
+    if (val && val.length >= 2 && !hiddenVal) {
       window.locAutocomplete(inputId, dropdownId, hiddenId);
     } else {
-      renderLocDropdown(inputId, dropdownId, hiddenId, window._sayimLocs.slice(0,8));
+      renderLocDropdown(inputId, dropdownId, hiddenId, window._sayimLocs.slice(0,20));
     }
   };
   window.selectLoc = (inputId, dropdownId, hiddenId, id, label) => {
     document.getElementById(inputId).value = label;
     document.getElementById(hiddenId).value = id;
     document.getElementById(dropdownId).style.display = 'none';
-    // Seri modda scan input'a geç, lokasyon modda ürün input'a geç
+    // Input'u readonly yap — seçili görünsün
+    // Tıklanınca tekrar dropdown açılsın
+    const inp = document.getElementById(inputId);
+    if (inp) {
+      inp.style.borderColor = 'var(--green)';
+      inp.style.background = '#f0fdf4';
+      // Tekrar tıklanınca dropdown açılsın
+      inp.onclick = () => {
+        inp.style.borderColor = '';
+        inp.style.background = '';
+        inp.value = '';
+        document.getElementById(hiddenId).value = '';
+        inp.onclick = null;
+        locAutocompleteAll(inputId, dropdownId, hiddenId);
+      };
+    }
     if (inputId === 'seriLocInput') setTimeout(() => document.getElementById('sayimScan')?.focus(), 50);
     if (inputId === 'lokLocInput') setTimeout(() => document.getElementById('lokProdInput')?.focus(), 50);
+  };
+  window.clearLocInput = (inputId, hiddenId) => {
+    const inp = document.getElementById(inputId);
+    const hid = document.getElementById(hiddenId);
+    if (inp) { inp.value=''; inp.style.borderColor=''; inp.style.background=''; inp.onclick=null; inp.focus(); }
+    if (hid) hid.value='';
   };
   window.hideDropdown = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
 
@@ -878,7 +913,20 @@ async function renderSayim() {
       const prod = window._sayimProds.find(p => p.id === pid);
       if (!prod) return;
       document.getElementById('lokProdId').value = prod.id;
-      document.getElementById('lokProdInput').value = prod.sku + ' — ' + prod.name;
+      const inp = document.getElementById('lokProdInput');
+      inp.value = prod.sku + ' — ' + prod.name;
+      inp.style.borderColor = 'var(--green)';
+      inp.style.background = '#f0fdf4';
+      // Tıklanınca temizle ve tekrar seç
+      inp.onclick = () => {
+        inp.value = '';
+        inp.style.borderColor = '';
+        inp.style.background = '';
+        document.getElementById('lokProdId').value = '';
+        inp.onclick = null;
+        prodAutocompleteAll();
+        inp.focus();
+      };
       dd.style.display = 'none';
       setTimeout(() => document.getElementById('lokQty')?.focus(), 50);
     };
@@ -897,9 +945,14 @@ async function renderSayim() {
     _renderProdDD(matches);
   };
   window.prodAutocompleteAll = () => {
-    const val = document.getElementById('lokProdInput')?.value.trim();
-    if (val && val.length >= 2) window.prodAutocomplete();
-    else _renderProdDD(window._sayimProds.slice(0,8));
+    // Her focus'ta listeyi aç — seçilmiş olsa bile
+    const val = document.getElementById('lokProdInput')?.value.trim().toLowerCase();
+    const hiddenVal = document.getElementById('lokProdId')?.value;
+    if (val && val.length >= 2 && !hiddenVal) {
+      window.prodAutocomplete();
+    } else {
+      _renderProdDD(window._sayimProds.slice(0,20));
+    }
   };
   window.selectProd = (id) => {
     const prod = window._sayimProds.find(p => p.id === id);
